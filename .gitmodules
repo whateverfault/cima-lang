@@ -1,0 +1,3 @@
+[submodule "src/thirdparty/nothing"]
+	path = src/thirdparty/nothing
+	url = https://github.com/whateverfault/nothing.git
