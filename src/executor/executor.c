@@ -11,72 +11,7 @@
 
 #include "executor.h"
 #include "funcs.h"
-
-static Var builtin_vars[] = {
-    (Var){
-        .name = "pi",
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = M_PI,
-        },
-        .constant = true,
-    },
-    (Var){
-        .name = "e",
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = M_E,
-        },
-        .constant = true,
-    },
-    (Var){
-        .name = "nan",
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = NAN,
-        },
-        .constant = true,
-    },
-};
-
-#define builtin_vars_count sizeof(builtin_vars)/sizeof(builtin_vars[0])
-
-static Pattern print_pattern[] = {
-    (Pattern){
-        .name = "msg",
-        .type = STR_TYPE,
-    },
-    (Pattern){
-        .name = "...",
-        .type = VARIADIC_TYPE,
-    },
-};
-
-static const Patterns format_patterns = (Patterns){
-    .items = print_pattern,
-    .count = 2,
-    .capacity = 2,
-};
-
-static FuncBuiltIn builtin_funcs[] = {
-    (FuncBuiltIn){
-        .name = "format",
-        .func = format_func,
-        .args = format_patterns,
-    },
-    (FuncBuiltIn){
-        .name = "print",
-        .func = print_func,
-        .args = format_patterns,
-    },
-    (FuncBuiltIn){
-        .name = "println",
-        .func = println_func,
-        .args = format_patterns,
-    },
-};
-
-#define builtin_funcs_count sizeof(builtin_funcs)/sizeof(builtin_funcs[0])
+#include "other/built_in.h"
 
 void context_init(Context *context) {
     context->scope.vars = hm_alloc();
@@ -98,18 +33,18 @@ void append_error(Context *context, ErrorKind err) {
     da_append(context->errors, err);
 }
 
-Var *alloc_var(char *name, Value val, bool constant) {
+Var *alloc_var(String_Builder name, Value val, bool constant) {
     Var *var = (Var*)malloc(sizeof(Var));
     assert(var != NULL && "Memory allocation failed");
 
-    var->name = strdup(name);
+    var->name = name;
     var->val = val;
     var->constant = constant;
     
     return var;
 }
 
-FuncCustom *alloc_custom_func(char *name, Patterns args, AST_Node *body, bool constant) {
+FuncCustom *alloc_custom_func(String_Builder name, Patterns args, AST_Node *body, bool constant) {
     FuncCustom *func = (FuncCustom*)malloc(sizeof(FuncCustom));
     assert(func != NULL && "Memory allocation failed");
 
@@ -122,32 +57,40 @@ FuncCustom *alloc_custom_func(char *name, Patterns args, AST_Node *body, bool co
     return func;
 }
 
-bool get_var(Context *context, const char *name, size_t name_len, Var **variable) {
+bool get_var(Context *context, String_View name_sv, Var **variable) {
     for (size_t i = 0; i < builtin_vars_count; ++i) {
-        if (strncmp(name, builtin_vars[i].name, name_len) == 0) {
+        if (sv_cmp_sb(name_sv, builtin_vars[i].name)) {
             *variable = &builtin_vars[i];
             return true;
         }
     }
 
-    *variable = hm_get(context->scope.vars, name);
+    *variable = hm_nget(context->scope.vars, name_sv.items, name_sv.count);
     return *variable != NULL;
 }
 
-bool get_func(Context *context, const char *name, size_t name_len, Func **func) {
+bool get_func(Context *context, String_View name_sv, Func **func) {
     for (size_t i = 0; i < builtin_funcs_count; ++i) {
-        if (strncmp(name, builtin_funcs[i].name, name_len) == 0) {
+        if (sv_cmp_sb(name_sv, builtin_funcs[i].name)) {
             *func = (void*)&builtin_funcs[i];
             return true;
         }
     }
 
-    *func = hm_get(context->scope.funcs, name);
+    *func = hm_nget(context->scope.funcs, name_sv.items, name_sv.count);
     return *func != NULL;
 }
 
-bool resolve_name(Context *context, char *name, Var **var) {
-    return get_var(context, name, strlen(name), var) && var != NULL;
+bool resolve_name(Context *context, String_View name_sv, Var **var) {
+    return get_var(context, name_sv, var) && var != NULL;
+}
+
+bool resolve_name_cstr(Context *context, char *name, Var **var) {
+    String_View sv = {
+        .items = name,
+        .count = strlen(name),
+    };
+    return resolve_name(context, sv, var);
 }
 
 bool resolve_name_node(Context *context, AST_Node *node, Var **var) {
@@ -157,7 +100,7 @@ bool resolve_name_node(Context *context, AST_Node *node, Var **var) {
 
 bool resolve_func(Context *context, AST_Node *node, Func **func) {
     AST_NodeCall *call_node = (void*)node;
-    return get_func(context, call_node->name, strlen(call_node->name), func) && func != NULL;
+    return get_func(context, call_node->name, func) && func != NULL;
 }
 
 bool is_node_value(AST_Node *node) {
@@ -224,9 +167,9 @@ void register_func(Context *context, AST_Node *node) {
     assert(node->kind == AST_FUNC);
 
     AST_NodeFunc *func_node = (AST_NodeFunc*)node;
-    FuncCustom *func = alloc_custom_func(strdup(func_node->name), func_node->args, func_node->body, false);
+    FuncCustom *func = alloc_custom_func(sv_to_sb(func_node->name), func_node->args, func_node->body, false);
 
-    assert(hm_put(context->scope.funcs, strdup(func_node->name), func) == 0 && "Failed to register function.");
+    assert(hm_nput(context->scope.funcs, func_node->name.items, func_node->name.count, func) == 0 && "Failed to register function.");
 }
 
 void register_var(Context *context, AST_Node *node) {
@@ -237,9 +180,16 @@ void register_var(Context *context, AST_Node *node) {
     if (has_errors(context)) {
         return;
     }
-    
-    Var *var = alloc_var(strdup(let_node->name), val, false);
-    assert(hm_put(context->scope.vars, strdup(let_node->name), var) == 0 && "Failed to register function.");
+
+    Var *var = NULL;
+    if (!resolve_name(context, let_node->name, &var)) {
+        var = alloc_var(sv_to_sb(let_node->name), val, let_node->constant);
+        assert(hm_nput(context->scope.vars, let_node->name.items, let_node->name.count, var) == 0 && "Failed to register function.");
+        return;
+    }
+
+    var->val = val;
+    var->constant = let_node->constant;
 }
 
 Value execute_binop(Context *context, AST_Node *root) {
@@ -292,10 +242,10 @@ Value execute_binop(Context *context, AST_Node *root) {
                 return res.val;
             }
             
-            char *name = ((AST_NodeName*)binop->lhs)->name;
+            String_View name_sv = ((AST_NodeName*)binop->lhs)->name;
 
             Var *var = NULL;
-            if (resolve_name(context, name, &var)) {
+            if (resolve_name(context, name_sv, &var)) {
                 if (var->constant) {
                     append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
                     return res.val;
@@ -306,8 +256,8 @@ Value execute_binop(Context *context, AST_Node *root) {
                 return res.val;
             }
             
-            var = alloc_var(name, rhs, false);
-            hm_put(context->scope.vars, name, var);
+            var = alloc_var(sv_to_sb(name_sv), rhs, var->constant);
+            hm_nput(context->scope.vars, name_sv.items, name_sv.count, var);
 
             res.val = rhs;
         } break;

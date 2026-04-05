@@ -3,6 +3,7 @@
 
 #include "funcs.h"
 #include "nothing/nothing.h" 
+#include "other/built_in.h"
 
 #define HAS_VARIADIC(func) ((func)->args.items[(func)->args.count - 1].type->kind == TYPE_VARIADIC)
 
@@ -21,11 +22,9 @@ void check_args(Context *context, Func *func, Args args) {
     }
 }
 
-bool check_arg_name(Func *func, char *name) {
-    size_t name_len = strlen(name);
-    
+bool check_arg_name(Func *func, String_View name) {
     for (size_t i = 0; i < func->args.count; ++i) {
-        if (strncmp(name, func->args.items[i].name, name_len)) {
+        if (sv_cmp_sb(name, func->args.items[i].name)) {
             return true;
         }
     }
@@ -51,6 +50,7 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped, Varia
         Value value = execute(context, arg.node);
         if (has_errors(context)) {
             free(func_args);
+            free(va_args);
             return;
         }
 
@@ -59,12 +59,13 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped, Varia
             continue;
         }
         
-        func_args[i].name = arg.has_name? arg.name : func->args.items[i].name;
+        func_args[i].name = arg.has_name? sv_to_sb(arg.name) : func->args.items[i].name;
         func_args[i].val = value;
 
-        if (!check_arg_name(func, func_args[i].name)) {
+        if (!check_arg_name(func, sb_to_sv(func_args[i].name))) {
             append_error(context, ERROR_UNEXPECTED_NAMED_ARG);
             free(func_args);
+            free(va_args);
             return;
         }
     }
@@ -91,29 +92,37 @@ Value exec_func(Context *context, Func *func, Args args) {
     }
 
     Var *unwrapped = NULL;
-    Variadic va_args = {0};
-    unwrap_args(context, func, args, &unwrapped, &va_args);
+    
+    Variadic *va_args = (Variadic*)malloc(sizeof(Variadic));
+    *va_args = (Variadic){0};
+    unwrap_args(context, func, args, &unwrapped, va_args);
     if (has_errors(context)) {
         return value;
     }
 
+    Var *va_args_var = NULL;
+    
     HashMap *local_vars = hm_alloc();
             
     for (size_t i = 0; i < func->args.count - HAS_VARIADIC(func); ++i) {
-        assert(hm_put(local_vars, strdup(unwrapped[i].name), &unwrapped[i]) == 0);
+        assert(hm_nput(local_vars, unwrapped[i].name.items, unwrapped[i].name.count, &unwrapped[i]) == 0);
     }
     
-    if (HAS_VARIADIC(func)) {
-        Var va_args_var = (Var){
-            .name = "...",
+    if (HAS_VARIADIC(func) && va_args->count > 0) {
+        va_args_var = (Var*)malloc(sizeof(Var));
+        *va_args_var = (Var){
+            .name = (String_Builder){
+                .items = "...",
+                .count = 3,
+            },
             .val = (Value){
                 .type = VARIADIC_TYPE,
-                .as_ptr = &va_args,
+                .as_ptr = va_args,
             },
             .constant = true,
         };
         
-        assert(hm_put(local_vars, strdup("..."), &va_args_var) == 0);
+        assert(hm_nput(local_vars, va_args_var->name.items, va_args_var->name.count, va_args_var) == 0);
     }
 
     Context local_context = {
@@ -143,6 +152,9 @@ Value exec_func(Context *context, Func *func, Args args) {
     --recursion_depth;
     
     free(unwrapped);
+    free(va_args->args);
+    free(va_args);
+    free(va_args_var);
     return value;
 }
 
@@ -163,8 +175,9 @@ Value print_func(Context *context, Context *fn_context) {
     if (has_errors(context)) {
         return ret;
     }
-    
-    printf(formated.as_ptr);
+
+    sb_print(formated.as_str);
+    free(formated.as_str.items);
     return ret;
 }
 
@@ -177,62 +190,25 @@ Value read_func(Context *context, Context *fn_context) {
 Value format_func(Context *context, Context *fn_context) {
     Value ret = alloc_value(STR_TYPE);
     
-    Var *format;
-    if (!resolve_name(fn_context, "msg", &format)) {
+    Var *fmt;
+    if (!resolve_name_cstr(fn_context, "msg", &fmt)) {
         append_error(context, ERROR_NOT_DEFINED);
         return ret;
     }
-
-    String_Builder sb = {0};
-    Variadic *va_args = get_va_args(fn_context);
     
-    Lexer l = {
-        .source = format->val.as_ptr,
-        .source_len = strlen(format->val.as_ptr),
-    };
+    Variadic *va_args = get_va_args(fn_context);
 
-    lexer_init(&l);
-    size_t va_arg_pos = 0;
-
-    while (l.cur.kind != TOKEN_EOF) {
-        sb_appendf(&sb, "%s", l.skipped);
-        
-        if (l.cur.kind != TOKEN_LBRACE) {
-            sb_appendf(&sb, "%s", l.cur.val);
-            lexer_next(&l);
-            continue;
-        }
-        
-        lexer_next(&l);
-        
-        if (l.cur.kind == TOKEN_RBRACE) {
-            if (va_arg_pos >= va_args->count) {
-                append_error(fn_context, ERROR_FORMAT_MISMATCHES_VA_ARGS_COUNT);
-                ret.as_ptr = sb_to_cstr(&sb);
-                free(sb.items);
-                return ret;
-            }
-
-            to_str(&sb, fn_context, va_args->args[va_arg_pos]);
-            ++va_arg_pos;
-        }
-        else {
-            AST_Node *expr = parse(&l);
-            Value val = execute_expr(context, expr);
-            to_str(&sb, fn_context, val);
-            ast_free(expr);
-        }
-
-        lexer_next(&l);
-    }
-
-    ret.as_ptr = sb_to_cstr(&sb);
-    free(sb.items);
+    String_View fmt_sv = sb_to_sv(fmt->val.as_str);
+    ret.as_str = (String_Builder){0};
+    format_str(&ret.as_str, context, fmt_sv, va_args);
     return ret;
 }
 
 Variadic *get_va_args(Context *context) {
     Var *va_args_var = NULL;
-    resolve_name(context, "...", &va_args_var);
+    if (!resolve_name_cstr(context, "...", &va_args_var)) {
+        return NULL;
+    }
+    
     return (void*)va_args_var->val.as_ptr;
 }

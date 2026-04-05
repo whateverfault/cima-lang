@@ -95,9 +95,11 @@ static const ValueTypeBasic variadic_type = (ValueTypeBasic){
 #define VOID_TYPE (void*)&void_type
 #define VARIADIC_TYPE (void*)&variadic_type
 
+typedef struct Variadic Variadic;
 typedef struct Context Context;
 typedef struct Value Value;
 
+void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variadic *va_args);
 void to_str(String_Builder *sb, Context *context, Value val);
 
 #endif //TYPE_H

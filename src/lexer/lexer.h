@@ -2,7 +2,8 @@
 #define LEXER_H
 
 #include <stdbool.h>
-#include <stddef.h>
+
+#include "nothing/nothing.h"
 
 typedef enum {
     TOKEN_NONE,
@@ -51,17 +52,18 @@ typedef enum {
 } TokenKind;
 
 typedef struct {
-    char *val;
+    String_View val;
     TokenKind kind;
 } Token;
 
 typedef struct {
-    char *source;
-    char *skipped;
-    size_t source_len;
+    String_View source;
+    String_View skipped;
     size_t pos;
     Token cur;
 } Lexer;
+
+int escape(int c);
 
 bool is_binop(Token tok);
 bool is_unop(Token tok);

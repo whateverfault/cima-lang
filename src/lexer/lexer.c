@@ -6,25 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CURRENT(l) (l)->source[(l)->pos]
-#define INBOUNDS(l) ((l)->pos < (l)->source_len && CURRENT(l) != '\0')
-
-void token_free(Token tok) {
-    switch (tok.kind) {
-        case TOKEN_INT:
-        case TOKEN_FLOAT:
-        case TOKEN_STR:
-        case TOKEN_CHAR:
-        case TOKEN_NAME:
-        case TOKEN_KW_FN:
-        case TOKEN_KW_TRUE:
-        case TOKEN_KW_FALSE:{
-            free(tok.val);
-        } break;
-
-        default: break;
-    }
-}
+#define CURRENT(l) (l)->source.items[(l)->pos]
+#define INBOUNDS(l) ((l)->pos < (l)->source.count)
 
 bool is_binop(Token tok) {
     switch (tok.kind) {
@@ -126,7 +109,7 @@ bool is_special_symb(char symb) {
     }
 }
 
-char escape(char c) {
+int escape(int c) {
     switch (c) {
         case 'n': return '\n';
         case 'r': return '\r';
@@ -135,9 +118,9 @@ char escape(char c) {
         case 'a': return '\a';
         case '\'': return '\'';
         case '\"': return '\"';
-
-        // TODO: Throw an error
-        default: return c;
+        case '0': return '\0';
+        
+        default: return -1;
     }
 }
 
@@ -153,9 +136,9 @@ char *fill_val(Lexer *l, size_t len, size_t start) {
 
     size_t decrease = 0;
     for (size_t i = 0; i < val_len; ++i) {
-        char c = l->source[start + i];
+        char c = l->source.items[start + i];
         if (c == '\\' && i + 1 < val_len) {
-            c = escape(l->source[start + ++i]);
+            c = escape(l->source.items[start + ++i]);
             ++decrease;
         }
         
@@ -167,108 +150,118 @@ char *fill_val(Lexer *l, size_t len, size_t start) {
 }
 
 void skip_whitespaces(Lexer *l) {
-    if (l->skipped != NULL && l->skipped != "") {
-        free(l->skipped);
-    }
-    
-    size_t start = l->pos;
+    l->skipped.count = 0;
+    l->skipped.items = l->source.items + l->pos;
     
     while (INBOUNDS(l) && (isblank(CURRENT(l)) || iscntrl(CURRENT(l)))) {
+        ++l->skipped.count;
         ++l->pos;
-    }
-
-    l->skipped = fill_val(l, l->pos - start, start);
-    
-    if (l->skipped == NULL) {
-        l->skipped = "";
     }
 }
 
 Token lexer_get_number(Lexer *l) {
-    bool is_integer = true;
-    size_t start = l->pos;
+    Token tok = {
+        .kind = TOKEN_INT,
+        .val = (String_View){
+            .items = l->source.items,
+            .count = 0,
+        },
+    };
     
     while (INBOUNDS(l) && (isdigit(CURRENT(l)) || CURRENT(l) == '.')) {
         if (CURRENT(l) == '.') {
-            is_integer = false;
+            tok.kind = TOKEN_FLOAT;
         }
-        
+
+        ++tok.val.count;
         ++l->pos;
     }
     
-    return (Token){
-        .val = fill_val(l, l->pos - start, start),
-        .kind = is_integer? TOKEN_INT : TOKEN_FLOAT,
-    };
+    return tok;
 }
 
 Token lexer_get_str(Lexer *l) {
-    size_t start = ++l->pos;
-
-    size_t len = 0;
+    ++l->pos;
+    
+    Token tok = {
+        .kind = TOKEN_STR,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 0,
+        },
+    };
+    
     while (INBOUNDS(l)
         && CURRENT(l) != '\"') {
         if (CURRENT(l) == '\\') {
+            ++tok.val.count;
             ++l->pos;
         }
 
         if (CURRENT(l) == '{') {
-            while (INBOUNDS(l) && CURRENT(l) != '}'){
-                ++len;
+            size_t to_skip = 0;
+            while (INBOUNDS(l) && (CURRENT(l) != '}' || to_skip != 0)){
+                to_skip -= CURRENT(l) == '}';
+                
+                ++tok.val.count;
                 ++l->pos;
+
+                to_skip += CURRENT(l) == '{';
             }
         }
         
-        ++len;
+        ++tok.val.count;
         ++l->pos;
     }
 
-    char *val = fill_val(l, len, start);
     ++l->pos;
-    
-    return (Token){
-        .val = val,
-        .kind = TOKEN_STR,
-    };
+    return tok;
 }
 
 Token lexer_get_char(Lexer *l) {
-    size_t start = ++l->pos;
+    ++l->pos;
     
-    size_t len = 0;
+    Token tok = {
+        .kind = TOKEN_CHAR,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 0,
+        },
+    };
+    
     while (INBOUNDS(l)
         && CURRENT(l) != '\'') {
         if (CURRENT(l) == '\\') {
+            ++tok.val.count;
             ++l->pos;
         }
         
-        ++len;
+        ++tok.val.count;
         ++l->pos;
     }
 
-    char *val = fill_val(l, len, start);
     ++l->pos;
-
-    return (Token){
-        .val = val,
-        .kind = TOKEN_CHAR,
-    };
+    return tok;
 }
 
 Token lexer_get_name(Lexer *l) {
-    size_t start = l->pos;
+    Token tok = {
+        .kind = TOKEN_NAME,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 0,
+        },
+    };
     
     while (INBOUNDS(l)
         && !isblank(CURRENT(l))
         && !is_special_symb(CURRENT(l))
         && !is_binop_symb(CURRENT(l))) {
+        ++tok.val.count;
         ++l->pos;
     }
-
-    return (Token){
-        .val = fill_val(l, l->pos - start, start),
-        .kind = TOKEN_NAME,
-    };
+    
+    return tok;
 }
 
 Token get_lit_token(Lexer *l) {
@@ -287,23 +280,23 @@ Token get_lit_token(Lexer *l) {
     else {
         tok = lexer_get_name(l);
         
-        if (strncmp(tok.val, "fn", strlen(tok.val)) == 0) {
+        if (sv_cmp_cstr(tok.val, "fn")) {
             tok.kind = TOKEN_KW_FN;
         }
 
-        if (strncmp(tok.val, "const", strlen(tok.val)) == 0) {
+        if (sv_cmp_cstr(tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
 
-        if (strncmp(tok.val, "let", strlen(tok.val)) == 0) {
+        if (sv_cmp_cstr(tok.val, "let")) {
             tok.kind = TOKEN_KW_LET;
         }
         
-        if (strncmp(tok.val, "true", strlen(tok.val)) == 0) {
+        if (sv_cmp_cstr(tok.val, "true")) {
             tok.kind = TOKEN_KW_TRUE;
         }
 
-        if (strncmp(tok.val, "false", strlen(tok.val)) == 0) {
+        if (sv_cmp_cstr(tok.val, "false")) {
             tok.kind = TOKEN_KW_FALSE;
         }
     }
@@ -314,125 +307,79 @@ Token get_lit_token(Lexer *l) {
 Token get_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_NONE,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
     };
     
-    switch (CURRENT(l)) {
+switch (CURRENT(l)) {
         case '+': {
-            tok = (Token){
-                .val = "+",
-                .kind = TOKEN_PLUS,
-            };
+            tok.kind = TOKEN_PLUS;
         } break;
 
         case '-': {
-            tok = (Token){
-                .val = "-",
-                .kind = TOKEN_MINUS,
-            };
+            tok.kind = TOKEN_MINUS;
         } break;
 
         case '*': {
-            tok = (Token){
-                .val = "*",
-                .kind = TOKEN_STAR,
-            };
+            tok.kind = TOKEN_STAR;
         } break;
 
         case '/': {
-            tok = (Token){
-                .val = "/",
-                .kind = TOKEN_SLASH,
-            };
+            tok.kind = TOKEN_SLASH;
         } break;
 
         case '%': {
-            tok = (Token){
-                .val = "%",
-                .kind = TOKEN_PERCENT,
-            };
+            tok.kind = TOKEN_PERCENT;
         } break;
 
         case '^': {
-            tok = (Token){
-                .val = "^",
-                .kind = TOKEN_CARET,
-            };
+            tok.kind = TOKEN_CARET;
         } break;
 
         case '(': {
-            tok = (Token){
-                .val = "(",
-                .kind = TOKEN_LPAREN,
-            };
+            tok.kind = TOKEN_LPAREN;
         } break;
 
         case ')': {
-            tok = (Token){
-                .val = ")",
-                .kind = TOKEN_RPAREN,
-            };
+            tok.kind = TOKEN_RPAREN;
         } break;
 
         case '[': {
-            tok = (Token){
-                .val = "[",
-                .kind = TOKEN_LBRACK,
-            };
+            tok.kind = TOKEN_LBRACK;
         } break;
 
         case ']': {
-            tok = (Token){
-                .val = "]",
-                .kind = TOKEN_RBRACK,
-            };
+            tok.kind = TOKEN_RBRACK;
         } break;
 
         case '{': {
-            tok = (Token){
-                .val = "{",
-                .kind = TOKEN_LBRACE,
-            };
+            tok.kind = TOKEN_LBRACE;
         } break;
 
         case '}': {
-            tok = (Token){
-                .val = "}",
-                .kind = TOKEN_RBRACE,
-            };
+            tok.kind = TOKEN_RBRACE;
         } break;
-
-        case '.': {
-            tok = (Token){
-                .val = ".",
-                .kind = TOKEN_DOT,
-            };
-        } break;
-            
+        
         case ',': {
-            tok = (Token){
-                .val = ",",
-                .kind = TOKEN_COMMA,
-            };
+            tok.kind = TOKEN_COMMA;
         } break;
 
         case ':': {
-            tok = (Token){
-                .val = ":",
-                .kind = TOKEN_COLON,
-            };
+            tok.kind = TOKEN_COLON;
         } break;
 
         case ';': {
-            tok = (Token){
-                .val = ";",
-                .kind = TOKEN_SEMICOLON,
-            };
+            tok.kind = TOKEN_SEMICOLON;
         } break;
             
-        default: break;
+        default: {
+            tok.val.count = 0;
+        } break;
     }
 
-    if (tok.kind != TOKEN_NONE) {
+    if (tok.val.count != 0) {
         ++l->pos;
     }
     
@@ -440,69 +387,56 @@ Token get_token(Lexer *l) {
 }
 
 Token get_eq_token(Lexer *l) {
-    TokenKind kind = TOKEN_EQ;
+    Token tok = {
+        .kind = TOKEN_EQ,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
 
     ++l->pos;
-    if (CURRENT(l) == '>') {
-        kind = TOKEN_ARROW;
+    if (INBOUNDS(l) && CURRENT(l) == '>') {
+        tok.kind = TOKEN_ARROW;
+        ++tok.val.count;
         ++l->pos;
-    }
-
-    Token tok = {
-        .kind = kind,
-    };
-    
-    if (kind == TOKEN_EQ) {
-        tok.val = "=";
-    }
-    else {
-        tok.val = "=>";
     }
 
     return tok;
 }
 
 Token get_gt_token(Lexer *l) {
-    TokenKind kind = TOKEN_GT;
+    Token tok = {
+        .kind = TOKEN_GT,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
 
     ++l->pos;
-    if (CURRENT(l) == '=') {
-        kind = TOKEN_GTEQ;
+    if (INBOUNDS(l) && CURRENT(l) == '=') {
+        tok.kind = TOKEN_GTEQ;
         ++l->pos;
-    }
-
-    Token tok = {
-        .kind = kind,
-    };
-    
-    if (kind == TOKEN_GT) {
-        tok.val = ">";
-    }
-    else {
-        tok.val = ">=";
     }
 
     return tok;
 }
 
 Token get_lt_token(Lexer *l) {
-    TokenKind kind = TOKEN_LT;
+    Token tok = {
+        .kind = TOKEN_LT,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
 
     ++l->pos;
-    if (CURRENT(l) == '=') {
-        kind = TOKEN_LTEQ;
+    if (INBOUNDS(l) && CURRENT(l) == '=') {
+        tok.kind = TOKEN_LTEQ;
+        ++tok.val.count;
         ++l->pos;
-    }
-
-    Token tok = {
-        .kind = kind,
-    };
-    
-    if (kind == TOKEN_LT) {
-        tok.val = "<";
-    }
-    else {
-        tok.val = "<=";
     }
 
     return tok;
@@ -511,18 +445,21 @@ Token get_lt_token(Lexer *l) {
 Token get_dot_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_DOT,
-        .val = ".",
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
     };
-
+    
     ++l->pos;
-    if (CURRENT(l) == '.') {
+    if (INBOUNDS(l) && CURRENT(l) == '.') {
         tok.kind = TOKEN_RANGE;
-        tok.val = "..";
+        ++tok.val.count;
         ++l->pos;
         
-        if (CURRENT(l) == '.') {
+        if (INBOUNDS(l) && CURRENT(l) == '.') {
             tok.kind = TOKEN_ELLIPSIS;
-            tok.val = "...";
+            ++tok.val.count;
             ++l->pos;
         }
     }
@@ -530,13 +467,45 @@ Token get_dot_token(Lexer *l) {
     return tok;
 }
 
+void skip_multi_line_comment(Lexer *l) {
+    ++l->pos;
+
+    while (INBOUNDS(l)) {
+        if (CURRENT(l) == '~') {
+            ++l->pos;
+            if (CURRENT(l) == '#') {
+                ++l->pos;
+            }
+
+            break;
+        }
+        
+        ++l->pos;
+    }
+}
+
+void skip_comment(Lexer *l) {
+    ++l->pos;
+
+    if (INBOUNDS(l) && CURRENT(l) == '~') {
+        skip_multi_line_comment(l);
+        return;
+    }
+
+    while (INBOUNDS(l) && CURRENT(l) != '\n') {
+        ++l->pos;
+    }
+}
+
 Token lexer_next(Lexer *l) {
-    token_free(l->cur);
     skip_whitespaces(l);
     
     if (!INBOUNDS(l)) {
         l->cur = (Token){
-            .val = "",
+            .val = {
+                .items = l->source.items + l->pos,
+                .count = 0,
+            },
             .kind = TOKEN_EOF,
         };
         return l->cur;
@@ -559,14 +528,19 @@ Token lexer_next(Lexer *l) {
 
         case '.': {
             tok = get_dot_token(l);
-        }
+        } break;
+
+        case '#': {
+            skip_comment(l);
+            tok = lexer_next(l);
+        } break;
             
         default: {
             tok = get_token(l);
         } break;
     }
 
-    if (tok.kind == TOKEN_NONE) {
+    if (tok.val.count == 0 && tok.kind != TOKEN_EOF) {
         tok = get_lit_token(l);
     }
     
@@ -575,5 +549,8 @@ Token lexer_next(Lexer *l) {
 }
 
 void lexer_init(Lexer *l) {
+    l->skipped.items = l->source.items;
+    l->skipped.count = 0;
+    
     lexer_next(l);
 }

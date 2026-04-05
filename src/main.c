@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "lexer/lexer.h"
 #include "parser/parser.h"
@@ -78,16 +77,28 @@ void print_error(ErrorKind err) {
     }
 }
 
-int main(void) {
-    char *source = "let msg = format(\"Hello, {}{'!'}\", \"World\")"
-                   "println(msg)";
+void usage(char **argv) {
+    fprintf(stderr, "USAGE: %s <path>", argv[0]);
+}
+
+int main(int argc, char **argv) {
+    String_Builder source_sb = {0};
+
+    if (argc != 2) {
+        usage(argv);
+        return 1;
+    }
+    
+    if (!read_entire_file(&source_sb, argv[1])) {
+        usage(argv);
+        return 1;
+    }
     
     Context context = {0};
     context_init(&context);
     
     Lexer l = {
-        .source = source,
-        .source_len = strlen(source),
+        .source = sb_to_sv(source_sb),
         .pos = 0,
     };
     
@@ -101,4 +112,6 @@ int main(void) {
     }
 
     context_free(&context);
+    da_free(source_sb);
+    return 0;
 }

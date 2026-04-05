@@ -4,7 +4,7 @@
 #include  "executor.h"
 #include "parser/parser.h"
 
-typedef struct {
+typedef struct Variadic{
     Value *args;
     size_t count;
 } Variadic;

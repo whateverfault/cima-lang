@@ -7,7 +7,7 @@
 
 void patterns_free(Patterns patterns) {
     for (size_t i = 0; i < patterns.count; ++i) {
-        free(patterns.items[i].name);
+        free(patterns.items[i].name.items);
     }
 
     da_free(patterns);
@@ -18,7 +18,7 @@ void args_free(Args args) {
         ast_free(args.items[i].node);
         
         if (args.items[i].has_name) {
-            free(args.items[i].name);
+            free(args.items[i].name.items);
         }
     }
 
@@ -39,29 +39,15 @@ void ast_free(AST_Node *root) {
             ast_free(unop->expr);
         } break;
 
-        case AST_NAME: {
-            AST_NodeName *name_node = (void*)root;
-            
-            free(name_node->name);
-        } break;
-
         case AST_CALL: {
             AST_NodeCall *call = (void*)root;
-            free(call->name);
             args_free(call->args);
-        } break;
-            
-        case AST_FUNC: {
-            AST_NodeFunc *func_node = (void*)root;
-            
-            free(func_node->name);
         } break;
 
         case AST_LET: {
             AST_NodeLet *let_node = (void*)root;
             
             ast_free(let_node->initializer);
-            free(let_node->name);
         } break;
 
         case AST_PROGRAM: {
@@ -135,17 +121,17 @@ AST_NodeUnOp *alloc_unop_expr(AST_Node *expr, UnaryOp op) {
     return tok;
 }
 
-AST_NodeName *alloc_name_expr(char *name) {
+AST_NodeName *alloc_name_expr(String_View sb) {
     AST_NodeName *tok = (AST_NodeName*)malloc(sizeof(AST_NodeName));
     assert(tok != NULL && "Memory allocation failed");
 
     tok->kind = AST_NAME;
-    tok->name = name;
+    tok->name = sb;
     
     return tok;
 }
 
-AST_NodeCall *alloc_call_expr(char *name, Args args) {
+AST_NodeCall *alloc_call_expr(String_View name, Args args) {
     AST_NodeCall *tok = (AST_NodeCall*)malloc(sizeof(AST_NodeCall));
     assert(tok != NULL && "Memory allocation failed");
 
@@ -156,7 +142,7 @@ AST_NodeCall *alloc_call_expr(char *name, Args args) {
     return tok;
 }
 
-AST_NodeFunc *alloc_func_stmt(char *name, Patterns args, AST_Node *body, ValueType *ret_type, bool constant) {
+AST_NodeFunc *alloc_func_stmt(String_View name, Patterns args, AST_Node *body, ValueType *ret_type, bool constant) {
     AST_NodeFunc *tok = (AST_NodeFunc*)malloc(sizeof(AST_NodeFunc));
     assert(tok != NULL && "Memory allocation failed");
 
@@ -170,7 +156,7 @@ AST_NodeFunc *alloc_func_stmt(char *name, Patterns args, AST_Node *body, ValueTy
     return tok;
 }
 
-AST_NodeLet *alloc_let_stmt(char *name, AST_Node *initializer, bool has_initializer, bool constant) {
+AST_NodeLet *alloc_let_stmt(String_View name, AST_Node *initializer, bool has_initializer, bool constant) {
     AST_NodeLet *tok = (AST_NodeLet*)malloc(sizeof(AST_NodeLet));
     assert(tok != NULL && "Memory allocation failed");
 
@@ -328,9 +314,10 @@ AST_Node *parse_num(Lexer *l) {
     errno = 0;
     
     char *end;
-    double num = strtod(l->cur.val, &end);
+    char *cstr = sv_to_cstr(l->cur.val);
+    double num = strtod(cstr, &end);
 
-    if (l->cur.val == end) {
+    if (end == l->cur.val.items) {
         return (void*)alloc_error(ERROR_WRONG_NUMBER_FORMAT);
     }
     if (errno == ERANGE) {
@@ -346,6 +333,7 @@ AST_Node *parse_num(Lexer *l) {
         output.val.type = FLOAT_TYPE;
     }
     
+    free(cstr);
     lexer_next(l);
     
     if (output.err != ERROR_NONE) {
@@ -359,7 +347,7 @@ AST_Node *parse_bool(Lexer *l) {
     assert(l->cur.kind == TOKEN_KW_TRUE || l->cur.kind == TOKEN_KW_FALSE);
 
     Value val = alloc_value(BOOL_TYPE);
-    val.as_int = (l->cur.kind == TOKEN_KW_TRUE);
+    val.as_int = l->cur.kind == TOKEN_KW_TRUE;
     
     lexer_next(l);
 
@@ -367,10 +355,12 @@ AST_Node *parse_bool(Lexer *l) {
 }
 
 AST_Node *parse_str(Lexer *l) {
+    // TODO: Fix escaping
+    
     assert(l->cur.kind == TOKEN_STR);
 
     Value val = alloc_value(STR_TYPE);
-    val.as_ptr = strdup(l->cur.val);
+    val.as_str = sv_to_escaped_sb(l->cur.val);
     
     lexer_next(l);
 
@@ -378,20 +368,27 @@ AST_Node *parse_str(Lexer *l) {
 }
 
 AST_Node *parse_char(Lexer *l) {
+    // TODO: Fix escaping
+    
     assert(l->cur.kind == TOKEN_CHAR);
 
-    if (strlen(l->cur.val) == 0) {
+    if (l->cur.val.count == 0) {
         lexer_next(l);
         return (void*)alloc_error(ERROR_EMPTY_CHAR_LIT);
     }
+
+    int c = l->cur.val.items[0];
+    if (l->cur.val.count == 2) {
+        c = escape(l->cur.val.items[1]);
+    }
     
-    if (strlen(l->cur.val) > 1) {
+    if (l->cur.val.count > 1 && c < 0) {
         lexer_next(l);
         return (void*)alloc_error(ERROR_MULTI_CHARACTER_CHAR_LIT);
     }
     
     Value val = alloc_value(CHAR_TYPE);
-    val.as_int = l->cur.val[0];
+    val.as_int = c;
     
     lexer_next(l);
 
@@ -426,7 +423,7 @@ AST_Node *parse_lit_expr(Lexer *l) {
 
 AST_Node *parse_name_expr(Lexer *l) {
     assert(l->cur.kind == TOKEN_NAME);
-    AST_Node *name = (void*)alloc_name_expr(strdup(l->cur.val));
+    AST_Node *name = (void*)alloc_name_expr(l->cur.val);
     lexer_next(l);
     return name;
 }
@@ -519,6 +516,12 @@ ErrorKind parse_args(Lexer *l, Args *args) {
         }
         
         AST_Node *expr = parse_expr(l, 0);
+        if (expr->kind == AST_ERROR) {
+            ErrorKind err = ((AST_NodeError*)expr)->err;
+            ast_free(expr);
+            args_free(parsed);
+            return err;
+        }
 
         Arg arg = {
             .node = expr,
@@ -562,7 +565,7 @@ AST_Node *parse_call_expr(Lexer *l, AST_Node *node) {
         return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
     }
 
-    char *name = ((AST_NodeName*)node)->name;
+    String_View name = ((AST_NodeName*)node)->name;
 
     Args args;
     ErrorKind err = parse_args(l, &args);
@@ -571,7 +574,7 @@ AST_Node *parse_call_expr(Lexer *l, AST_Node *node) {
         return (void*)alloc_error(err);
     }
             
-    AST_Node *call = (void*)alloc_call_expr(strdup(name), args);
+    AST_Node *call = (void*)alloc_call_expr(name, args);
     ast_free(node);
     return call;
 }
@@ -611,28 +614,30 @@ ErrorKind parse_basic_type(Lexer *l, ValueType **type) {
         return ERROR_UNEXPECTED_TOKEN;
     }
 
-    char *type_name = l->cur.val;
-    size_t type_len = strlen(type_name);
-
     bool parsed = false;
     
-    if (strncmp("int", type_name, type_len)) {
+    if (strncmp("int", l->cur.val.items, l->cur.val.count) == 0) {
         *type = INT_TYPE;
         parsed = true;
     }
 
-    if (strncmp("float", type_name, type_len)) {
+    if (strncmp("float", l->cur.val.items, l->cur.val.count) == 0) {
         *type = FLOAT_TYPE;
         parsed = true;
     }
 
-    if (strncmp("str", type_name, type_len)) {
+    if (strncmp("str", l->cur.val.items, l->cur.val.count) == 0) {
         *type = STR_TYPE;
         parsed = true;
     }
 
-    if (strncmp("any", type_name, type_len)) {
+    if (strncmp("any", l->cur.val.items, l->cur.val.count) == 0) {
         *type = ANY_TYPE;
+        parsed = true;
+    }
+
+    if (strncmp("void", l->cur.val.items, l->cur.val.count) == 0) {
+        *type = VOID_TYPE;
         parsed = true;
     }
     
@@ -695,7 +700,7 @@ ErrorKind parse_patterns(Lexer *l, Patterns *args) {
 
         if (l->cur.kind == TOKEN_ELLIPSIS) {
             Pattern pattern = (Pattern){
-                .name = strdup(l->cur.val),
+                .name = sv_to_sb(l->cur.val),
                 .type = VARIADIC_TYPE,
             };
         
@@ -713,7 +718,7 @@ ErrorKind parse_patterns(Lexer *l, Patterns *args) {
             return ERROR_UNEXPECTED_TOKEN;
         }
         
-        char *name = strdup(l->cur.val);
+        String_View name_sv = l->cur.val;
 
         lexer_next(l);
         
@@ -723,14 +728,13 @@ ErrorKind parse_patterns(Lexer *l, Patterns *args) {
             
             ErrorKind err = parse_type(l, &type);
             if (err != ERROR_NONE) {
-                free(name);
                 patterns_free(parsed);
                 return err;
             }
         }
 
         Pattern pattern = (Pattern){
-            .name = name,
+            .name = sv_to_sb(name_sv),
             .type = type,
         };
         
@@ -756,19 +760,17 @@ AST_Node *parse_func_stmt(Lexer *l, bool constant) {
         return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
     }
     
-    char *name = strdup(l->cur.val);
+    String_View name = l->cur.val;
 
     lexer_next(l);
 
     if (l->cur.kind != TOKEN_LPAREN) {
-        free(name);
         return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
     }
     
     Patterns args;
     ErrorKind err = parse_patterns(l, &args);
     if (err != ERROR_NONE) {
-        free(name);
         return (void*)alloc_error(err);
     }
 
@@ -777,7 +779,6 @@ AST_Node *parse_func_stmt(Lexer *l, bool constant) {
         lexer_next(l);
         err = parse_type(l, &ret_type);
         if (err != ERROR_NONE) {
-            free(name);
             return (void*)alloc_error(err);
         }
     }
@@ -791,12 +792,10 @@ AST_Node *parse_func_stmt(Lexer *l, bool constant) {
         body = parse_block_expr(l);
     }
     else {
-        free(name);
         return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
     }
 
     if (body->kind == AST_ERROR){
-        free(name);
         return body;
     }
 
@@ -813,7 +812,7 @@ AST_Node *parse_let_stmt(Lexer *l, bool constant) {
         return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
     }
 
-    char *name = strdup(l->cur.val);
+    String_View name = l->cur.val;
     
     if (l->cur.kind == TOKEN_SEMICOLON) {
         AST_NodeLet *let_node = alloc_let_stmt(name, NULL, false, constant);

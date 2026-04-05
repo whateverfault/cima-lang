@@ -70,6 +70,7 @@ typedef struct Value{
     union {
         INT_CTYPE as_int;
         FLOAT_CTYPE as_float;
+        String_Builder as_str;
         void *as_ptr;
     };
 } Value;
@@ -82,7 +83,7 @@ typedef struct {
 typedef struct {
     AST_Node *node;
     bool has_name;
-    char *name;
+    String_View name;
 } Arg;
 
 typedef struct {
@@ -92,7 +93,7 @@ typedef struct {
 } Args;
 
 typedef struct {
-    char *name;
+    String_Builder name;
     ValueType *type;
 } Pattern;
 
@@ -132,18 +133,18 @@ typedef struct {
 
 typedef struct AST_NodeName {
     AST_FIELDS
-    char *name;
+    String_View name;
 } AST_NodeName;
 
 typedef struct {
     AST_FIELDS
-    char *name;
+    String_View name;
     Args args;
 } AST_NodeCall;
 
 typedef struct {
     AST_FIELDS
-    char *name;
+    String_View name;
     Patterns args;
     AST_Node *body;
     ValueType *ret_type;
@@ -152,7 +153,7 @@ typedef struct {
 
 typedef struct {
     AST_FIELDS
-    char *name;
+    String_View name;
     AST_Node *initializer;
     bool has_initializer;
     bool constant;
@@ -188,7 +189,7 @@ Output alloc_output(ValueType *type);
 AST_NodeBinOp *alloc_binop_expr(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
 AST_NodeUnOp *alloc_unop_expr(AST_Node *expr, UnaryOp op);
 AST_NodeLit *alloc_lit_expr(Value val);
-AST_NodeName *alloc_name_expr(char *name);
+AST_NodeName *alloc_name_expr(String_View sb);
 AST_NodeError *alloc_error(ErrorKind err);
 
 ErrorKind parse_type(Lexer *l, ValueType **type);
