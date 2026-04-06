@@ -163,7 +163,7 @@ Token lexer_get_number(Lexer *l) {
     Token tok = {
         .kind = TOKEN_INT,
         .val = (String_View){
-            .items = l->source.items,
+            .items = l->source.items + l->pos,
             .count = 0,
         },
     };
@@ -280,23 +280,23 @@ Token get_lit_token(Lexer *l) {
     else {
         tok = lexer_get_name(l);
         
-        if (sv_cmp_cstr(tok.val, "fn")) {
+        if (sv_cmp_cstr(&tok.val, "fn")) {
             tok.kind = TOKEN_KW_FN;
         }
 
-        if (sv_cmp_cstr(tok.val, "const")) {
+        if (sv_cmp_cstr(&tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
 
-        if (sv_cmp_cstr(tok.val, "let")) {
+        if (sv_cmp_cstr(&tok.val, "let")) {
             tok.kind = TOKEN_KW_LET;
         }
         
-        if (sv_cmp_cstr(tok.val, "true")) {
+        if (sv_cmp_cstr(&tok.val, "true")) {
             tok.kind = TOKEN_KW_TRUE;
         }
 
-        if (sv_cmp_cstr(tok.val, "false")) {
+        if (sv_cmp_cstr(&tok.val, "false")) {
             tok.kind = TOKEN_KW_FALSE;
         }
     }

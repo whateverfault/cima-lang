@@ -9,32 +9,23 @@
 #define CHAR_CTYPE char
 
 typedef enum {
-    TYPE_INT = 0,
+    TYPE_INT,
     TYPE_FLOAT,
     TYPE_BOOL,
     TYPE_STR,
     TYPE_CHAR,
-    TYPE_VOID,
-    TYPE_ANY,
-} BasicType;
-
-typedef enum {
-    TYPE_BASIC = TYPE_ANY + 1,
     TYPE_ARRAY,
     TYPE_PTR,
+    TYPE_VOID,
+    TYPE_ANY,
     TYPE_VARIADIC,
-} TypeKind;
+} TypeTag;
 
-#define VALUE_TYPE_FIELDS TypeKind kind;
+#define VALUE_TYPE_FIELDS TypeTag tag;
 
 typedef struct {
     VALUE_TYPE_FIELDS
 } ValueType;
-
-typedef struct {
-    VALUE_TYPE_FIELDS
-    BasicType type;
-} ValueTypeBasic;
 
 typedef struct {
     VALUE_TYPE_FIELDS
@@ -46,44 +37,36 @@ typedef struct {
     ValueType *value_type;
 } ValueTypePtr;
 
-static const ValueTypeBasic int_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_INT,
+static const ValueType int_type = (ValueType){
+    .tag = TYPE_INT,
 };
 
-static const ValueTypeBasic float_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_FLOAT,
+static const ValueType float_type = (ValueType){
+    .tag = TYPE_FLOAT,
 };
 
-static const ValueTypeBasic bool_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_BOOL,
+static const ValueType bool_type = (ValueType){
+    .tag = TYPE_BOOL,
 };
 
-static const ValueTypeBasic str_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_STR,
+static const ValueType str_type = (ValueType){
+    .tag = TYPE_STR,
 };
 
-static const ValueTypeBasic char_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_CHAR,
+static const ValueType char_type = (ValueType){
+    .tag = TYPE_CHAR,
 };
 
-static const ValueTypeBasic any_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_ANY,
+static const ValueType any_type = (ValueType){
+    .tag = TYPE_ANY,
 };
 
-static const ValueTypeBasic void_type = (ValueTypeBasic){
-    .kind = TYPE_BASIC,
-    .type = TYPE_VOID,
+static const ValueType void_type = (ValueType){
+    .tag = TYPE_VOID,
 };
 
-static const ValueTypeBasic variadic_type = (ValueTypeBasic){
-    .kind = TYPE_VARIADIC,
-    .type = TYPE_ANY,
+static const ValueType variadic_type = (ValueType){
+    .tag = TYPE_VARIADIC,
 };
 
 #define INT_TYPE (void*)&int_type

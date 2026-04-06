@@ -48,12 +48,10 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variad
                 return;
             }
 
-            if (val.type->kind == TYPE_BASIC) {
-                ValueTypeBasic *basic = (void*)val.type;
-                if (basic->type == TYPE_STR) {
-                    String_View sv = sb_to_sv(val.as_str);
-                    format_str(sb, context, sv, va_args);
-                }
+            if (val.type->tag == TYPE_STR) {
+                String_View sv = {0};
+                sb_to_sv(&sv, val.as_ptr);
+                format_str(sb, context, sv, va_args);
             }
             else {
                 to_str(sb, context, val);
@@ -73,45 +71,47 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variad
 }
 
 void to_str(String_Builder *sb, Context *context, Value val) {
-    // TODO: Implement printing of arrays
-    switch (val.type->kind) {
-        case TYPE_BASIC: {
-            ValueTypeBasic *basic_type = (void*)val.type;
+    switch (val.type->tag) {
+        case TYPE_INT: {
+            sb_appendf(sb, "%d", val.as_int);
+        } break;
 
-            switch (basic_type->type) {
-                case TYPE_INT: {
-                    sb_appendf(sb, "%d", val.as_int);
-                } break;
+        case TYPE_FLOAT: {
+            sb_appendf(sb, "%f", val.as_float);
+        } break;
 
-                case TYPE_FLOAT: {
-                    sb_appendf(sb, "%f", val.as_float);
-                } break;
-
-                case TYPE_BOOL: {
-                    sb_appendf(sb, "%s", val.as_int == 0? "false" : "true");
-                } break;
+        case TYPE_BOOL: {
+            sb_appendf(sb, "%s", val.as_int == 0? "false" : "true");
+        } break;
                     
-                case TYPE_STR: {
-                    String_View sv = sb_to_sv(val.as_str);
-                    sb_append_sv(sb, &sv);
-                } break;
+        case TYPE_STR: {
+            sb_append_sb(sb, val.as_ptr);
+        } break;
 
-                case TYPE_CHAR: {
-                    sb_appendf(sb, "%c", (char)val.as_int);
-                } break;
+        case TYPE_CHAR: {
+            sb_appendf(sb, "%c", (char)val.as_int);
+        } break;
 
-                case TYPE_VOID: {
-                    sb_appendf(sb, "()");
-                } break;
-            
-                default: {
-                    da_append(context->errors, ERROR_INCOMPATIBLE_TYPES);
-                } break;
-            }
+        case TYPE_VOID: {
+            sb_appendf(sb, "()");
         } break;
 
         case TYPE_ARRAY: {
-            da_append(context->errors, ERROR_INCOMPATIBLE_TYPES);
+            sb_appendc(sb, '[');
+
+            Array *arr = (void*)val.as_ptr;
+
+            if (arr != NULL) {
+                for (size_t i = 0; i < arr->els.count; ++i) {
+                    to_str(sb, context, arr->els.items[i]);
+
+                    if (i < arr->els.count - 1) {
+                        sb_appendf(sb, ", ");
+                    }
+                }
+            }
+            
+            sb_appendc(sb, ']');
         } break;
 
         case TYPE_PTR: {

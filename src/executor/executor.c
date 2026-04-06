@@ -1,6 +1,5 @@
 #include <string.h>
 #include <assert.h>
-#include <math.h>
 
 #include "parser/parser.h"
 
@@ -33,18 +32,18 @@ void append_error(Context *context, ErrorKind err) {
     da_append(context->errors, err);
 }
 
-Var *alloc_var(String_Builder name, Value val, bool constant) {
+Var *alloc_var(String_Builder *name_sb, Value val, bool constant) {
     Var *var = (Var*)malloc(sizeof(Var));
     assert(var != NULL && "Memory allocation failed");
 
-    var->name = name;
+    var->name = name_sb;
     var->val = val;
     var->constant = constant;
     
     return var;
 }
 
-FuncCustom *alloc_custom_func(String_Builder name, Patterns args, AST_Node *body, bool constant) {
+FuncCustom *alloc_custom_func(String_Builder *name, Patterns args, AST_Node *body, bool constant) {
     FuncCustom *func = (FuncCustom*)malloc(sizeof(FuncCustom));
     assert(func != NULL && "Memory allocation failed");
 
@@ -57,7 +56,7 @@ FuncCustom *alloc_custom_func(String_Builder name, Patterns args, AST_Node *body
     return func;
 }
 
-bool get_var(Context *context, String_View name_sv, Var **variable) {
+bool get_var(Context *context, String_View *name_sv, Var **variable) {
     for (size_t i = 0; i < builtin_vars_count; ++i) {
         if (sv_cmp_sb(name_sv, builtin_vars[i].name)) {
             *variable = &builtin_vars[i];
@@ -65,11 +64,11 @@ bool get_var(Context *context, String_View name_sv, Var **variable) {
         }
     }
 
-    *variable = hm_nget(context->scope.vars, name_sv.items, name_sv.count);
+    *variable = hm_nget(context->scope.vars, name_sv->items, name_sv->count);
     return *variable != NULL;
 }
 
-bool get_func(Context *context, String_View name_sv, Func **func) {
+bool get_func(Context *context, String_View *name_sv, Func **func) {
     for (size_t i = 0; i < builtin_funcs_count; ++i) {
         if (sv_cmp_sb(name_sv, builtin_funcs[i].name)) {
             *func = (void*)&builtin_funcs[i];
@@ -77,11 +76,11 @@ bool get_func(Context *context, String_View name_sv, Func **func) {
         }
     }
 
-    *func = hm_nget(context->scope.funcs, name_sv.items, name_sv.count);
+    *func = hm_nget(context->scope.funcs, name_sv->items, name_sv->count);
     return *func != NULL;
 }
 
-bool resolve_name(Context *context, String_View name_sv, Var **var) {
+bool resolve_name(Context *context, String_View *name_sv, Var **var) {
     return get_var(context, name_sv, var) && var != NULL;
 }
 
@@ -90,21 +89,21 @@ bool resolve_name_cstr(Context *context, char *name, Var **var) {
         .items = name,
         .count = strlen(name),
     };
-    return resolve_name(context, sv, var);
+    return resolve_name(context, &sv, var);
 }
 
 bool resolve_name_node(Context *context, AST_Node *node, Var **var) {
     AST_NodeName *name_node = (void*)node;
-    return resolve_name(context, name_node->name, var);
+    return resolve_name(context, &name_node->name, var);
 }
 
 bool resolve_func(Context *context, AST_Node *node, Func **func) {
     AST_NodeCall *call_node = (void*)node;
-    return get_func(context, call_node->name, func) && func != NULL;
+    return get_func(context, &call_node->name, func) && func != NULL;
 }
 
 bool is_node_value(AST_Node *node) {
-    return node->kind == AST_LIT || node->kind == AST_NAME || node->kind == AST_CALL;
+    return node->kind == AST_LIT || node->kind == AST_NAME || node->kind == AST_CALL || node->kind == AST_ARR;
 }
 
 bool is_assignment(AST_Node *node) {
@@ -115,75 +114,37 @@ bool is_assignment(AST_Node *node) {
     return result;
 }
 
-Value get_node_value(Context *context, AST_Node *node) {
-    Value value = alloc_value(VOID_TYPE);
-    
-    if (node->kind == AST_ERROR) {
-        da_append(context->errors, ((AST_NodeError*)node)->err);
-        return value;
-    }
-
-    if (!is_node_value(node)) {
-        da_append(context->errors, ERROR_NOT_DEFINED);
-        return value;
-    }
-
-    switch (node->kind) {
-        case AST_LIT: {
-            value = ((AST_NodeLit*)node)->val;
-        } break;
-
-        case AST_NAME: {
-            Var *var = NULL;
-            if (!resolve_name_node(context, node, &var) || var == NULL) {
-                da_append(context->errors, ERROR_NOT_DEFINED);
-                return value;
-            }
-            
-            value = var->val;
-        } break;
-
-        case AST_CALL: {
-            Func *func = NULL;
-            if (!resolve_func(context, node, &func) || func == NULL) {
-                da_append(context->errors, ERROR_NOT_DEFINED);
-                return value;
-            }
-
-            AST_NodeCall *call = ((AST_NodeCall*)node);
-            value = exec_func(context, func, call->args);
-            if (has_errors(context)) {
-                return value;
-            }
-        } break;
-            
-        default: break;
-    }
-
-    return value;
-}
-
 void register_func(Context *context, AST_Node *node) {
     assert(node->kind == AST_FUNC);
 
     AST_NodeFunc *func_node = (AST_NodeFunc*)node;
-    FuncCustom *func = alloc_custom_func(sv_to_sb(func_node->name), func_node->args, func_node->body, false);
+
+    String_Builder *sb = sb_alloc();
+    sv_to_sb(sb, &func_node->name);
+    
+    FuncCustom *func = alloc_custom_func(sb, func_node->args, func_node->body, false);
 
     assert(hm_nput(context->scope.funcs, func_node->name.items, func_node->name.count, func) == 0 && "Failed to register function.");
 }
 
 void register_var(Context *context, AST_Node *node) {
     assert(node->kind == AST_LET);
-
     AST_NodeLet *let_node = (void*)node;
-    Value val = execute_expr(context, let_node->initializer);
-    if (has_errors(context)) {
-        return;
+
+    Value val = alloc_value(let_node->type);
+    if (let_node->has_initializer) {
+        val = execute_expr(context, let_node->initializer);
+        if (has_errors(context)) {
+            return;
+        }
     }
 
     Var *var = NULL;
-    if (!resolve_name(context, let_node->name, &var)) {
-        var = alloc_var(sv_to_sb(let_node->name), val, let_node->constant);
+    String_Builder *sb = sb_alloc();
+    sv_to_sb(sb, &let_node->name);
+    
+    if (!resolve_name(context, &let_node->name, &var)) {
+        var = alloc_var(sb, val, let_node->constant);
         assert(hm_nput(context->scope.vars, let_node->name.items, let_node->name.count, var) == 0 && "Failed to register function.");
         return;
     }
@@ -194,7 +155,7 @@ void register_var(Context *context, AST_Node *node) {
 
 Value execute_binop(Context *context, AST_Node *root) {
     assert(root->kind == AST_BINOP);
-    Output res = alloc_output(VOID_TYPE);
+    Value val = alloc_value(VOID_TYPE);
 
     AST_NodeBinOp *binop = (void*)root;
 
@@ -202,98 +163,101 @@ Value execute_binop(Context *context, AST_Node *root) {
     if (!is_assignment(root)) {
         lhs = execute_expr(context, binop->lhs);
         if (has_errors(context)) {
-            return res.val;
+            return val;
         }
     }
     
     Value rhs = execute_expr(context, binop->rhs);
     if (has_errors(context)) {
-        return res.val;
+        return val;
     }
     
     switch (binop->op) {
         case BINOP_PLUS: {
-            res = binary_plus(lhs, rhs);
+            val = binary_plus(context, lhs, rhs);
         } break;
 
         case BINOP_MINUS: {
-            res = binary_minus(lhs, rhs);
+            val = binary_minus(context, lhs, rhs);
         } break;
 
         case BINOP_MUL: {
-            res = binary_mul(lhs, rhs);
+            val = binary_mul(context, lhs, rhs);
         } break;
 
         case BINOP_DIV: {
-            res = binary_div(lhs, rhs);
+            val = binary_div(context, lhs, rhs);
         } break;
 
         case BINOP_MOD: {
-            res = binary_mod(lhs, rhs);
+            val = binary_mod(context, lhs, rhs);
         } break;
 
         case BINOP_POW: {
-            res = binary_pow(lhs, rhs);
+            val = binary_pow(context, lhs, rhs);
         } break;
 
         case BINOP_EQ: {
             if (binop->lhs->kind != AST_NAME) {
                 append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
-                return res.val;
+                return val;
             }
             
             String_View name_sv = ((AST_NodeName*)binop->lhs)->name;
 
             Var *var = NULL;
-            if (resolve_name(context, name_sv, &var)) {
+            if (resolve_name(context, &name_sv, &var)) {
                 if (var->constant) {
                     append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
-                    return res.val;
+                    return val;
                 }
             }
             else {
                 append_error(context, ERROR_NOT_DEFINED);
-                return res.val;
+                return val;
             }
+
+            String_Builder *sb = sb_alloc();
+            sv_to_sb(sb, &name_sv);
             
-            var = alloc_var(sv_to_sb(name_sv), rhs, var->constant);
+            var = alloc_var(sb, rhs, var->constant);
             hm_nput(context->scope.vars, name_sv.items, name_sv.count, var);
 
-            res.val = rhs;
+            val = rhs;
         } break;
             
         default: break;
     }
     
-    return res.val;
+    return val;
 }
 
 Value execute_unop(Context *context, AST_Node *root) {
     assert(root->kind == AST_UNOP);
-    Output output = alloc_output(VOID_TYPE);
+    Value val = alloc_value(VOID_TYPE);
 
     AST_NodeUnOp *unop = (void*)root;
     Value value = execute_expr(context, unop->expr);
     if (has_errors(context)) {
-        return output.val;
+        return val;
     }
     
     switch (unop->op) {
         case UNOP_PLUS: {
-            output = unary_plus(value);
-            if (output.err != ERROR_NONE) {
-                append_error(context, output.err);
+            val = unary_plus(context, value);
+            if (has_errors(context)) {
+                return val;
             }
             
-            return output.val;
+            return val;
         }
         case UNOP_MINUS: {
-            output = unary_minus(value);
-            if (output.err != ERROR_NONE) {
-                append_error(context, output.err);
+            val = unary_minus(context, value);
+            if (has_errors(context)) {
+                return val;
             }
             
-            return output.val;
+            return val;
         }
         default: break;
     }
@@ -301,7 +265,7 @@ Value execute_unop(Context *context, AST_Node *root) {
     assert(0 && "UNREACHABLE");
 }
 
-Value execute_call(Context *context, AST_Node *node) {
+Value execute_call_expr(Context *context, AST_Node *node) {
     assert(node->kind == AST_CALL);
 
     Value value = alloc_value(VOID_TYPE);
@@ -316,22 +280,51 @@ Value execute_call(Context *context, AST_Node *node) {
     return exec_func(context, func, call->args);
 }
 
-Value execute_block(Context *context, AST_Node *node) {
+// TODO: Implement execute_arr_expr
+Value execute_arr_expr(Context *context, AST_Node *node) {
+    assert(node->kind == AST_ARR);
+    assert(0 && "NOT IMPLEMENTED");
+}
+
+Value execute_block_expr(Context *context, AST_Node *node) {
     assert(node->kind == AST_BLOCK);
     Value ret = alloc_value(VOID_TYPE);
 
     AST_NodeBlock *block = (void*)node;
 
-    execute_nodes(context, block->nodes);
+    Context local_context = {
+        .scope = (Scope){
+            .vars = hm_copy(context->scope.vars),
+            .funcs = hm_copy(context->scope.funcs),
+        },
+        .errors = context->errors, 
+    };
+    
+    execute_nodes(&local_context, &block->nodes);
     if (has_errors(context)) {
         return ret;
     }
     
     if (block->ret_expr != NULL) {
-        ret = execute(context, block->ret_expr);
+        ret = execute(&local_context, block->ret_expr);
     }
-
+    
+    hm_free(local_context.scope.vars);
+    hm_free(local_context.scope.funcs);
     return ret;
+}
+
+Value execute_name_expr(Context *context, AST_Node *expr) {
+    Value val = alloc_value(VOID_TYPE);
+    
+    Var *var = NULL;
+    if (!resolve_name_node(context, expr, &var) || var == NULL) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return val;
+    }
+            
+    val = var->val;
+    return val;
 }
 
 Value execute_expr(Context *context, AST_Node *expr) {
@@ -345,21 +338,25 @@ Value execute_expr(Context *context, AST_Node *expr) {
         case AST_UNOP: {
             val = execute_unop(context, expr);
         } break;
-
-        case AST_CALL: {
-            val = execute_call(context, expr);
-        } break;
-            
-        case AST_NAME: {
-            val = get_node_value(context, expr);
-        } break;
-            
+        
         case AST_LIT: {
             val = ((AST_NodeLit*)expr)->val;
         } break;
 
+        case AST_ARR: {
+            val = execute_arr_expr(context, expr);
+        } break;
+
+        case AST_NAME: {
+            val = execute_name_expr(context, expr);
+        } break;
+
+        case AST_CALL: {
+            val = execute_call_expr(context, expr);
+        } break;
+
         case AST_BLOCK: {
-            val = execute_block(context, expr);
+            val = execute_block_expr(context, expr);
         } break;
             
         case AST_ERROR: {
@@ -392,9 +389,23 @@ Value execute(Context *context, AST_Node *node) {
     return value;
 }
 
-void execute_nodes(Context *context, Nodes nodes) {
-    for (size_t i = 0; i < nodes.count; ++i) {
-        AST_Node *node = nodes.items[i];
+void execute_nodes(Context *context, Nodes *nodes) {
+    for (size_t i = 0; i < nodes->count; ++i) {
+        AST_Node *node = nodes->items[i];
+        if (node->kind != AST_FUNC) {
+            continue;
+        }
+
+        execute(context, node);
+        if (has_errors(context)) {
+            return;
+        }
+
+        da_remove(nodes, i);
+    }
+    
+    for (size_t i = 0; i < nodes->count; ++i) {
+        AST_Node *node = nodes->items[i];
 
         execute(context, node);
         if (has_errors(context)) {
@@ -403,7 +414,8 @@ void execute_nodes(Context *context, Nodes nodes) {
     }
 }
 
+// TODO: Implement global context
 void execute_program(Context *context, AST_NodeProgram *program) {
-    execute_nodes(context, program->nodes);
+    execute_nodes(context, &program->nodes);
     ast_free((void*)program);
 }

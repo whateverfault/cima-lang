@@ -1,0 +1,8 @@
+let x = 1
+let x = 2
+my_print(format("{}", x))
+
+#let a: [] = [67, 69];
+#println("{}", a)
+
+const fn my_print(msg) => println(msg)

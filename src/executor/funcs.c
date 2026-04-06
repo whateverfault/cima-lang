@@ -1,11 +1,10 @@
 #include <stdio.h>
-#include <math.h>
 
 #include "funcs.h"
 #include "nothing/nothing.h" 
 #include "other/built_in.h"
 
-#define HAS_VARIADIC(func) ((func)->args.items[(func)->args.count - 1].type->kind == TYPE_VARIADIC)
+#define HAS_VARIADIC(func) ((func)->args.items[(func)->args.count - 1].type->tag == TYPE_VARIADIC)
 
 void check_args(Context *context, Func *func, Args args) {
     // TODO: Proper type checking
@@ -22,9 +21,9 @@ void check_args(Context *context, Func *func, Args args) {
     }
 }
 
-bool check_arg_name(Func *func, String_View name) {
+bool check_arg_name(Func *func, String_View *name_sv) {
     for (size_t i = 0; i < func->args.count; ++i) {
-        if (sv_cmp_sb(name, func->args.items[i].name)) {
+        if (sv_cmp_sb(name_sv, func->args.items[i].name)) {
             return true;
         }
     }
@@ -58,11 +57,22 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped, Varia
             va_args[i - va_args_start] = value;
             continue;
         }
+
+        if (arg.has_name) {
+            String_Builder *sb = sb_alloc();
+            sv_to_sb(sb, &arg.name);
+            func_args[i].name = sb;
+        }
+        else {
+            func_args[i].name = func->args.items[i].name;
+        }
         
-        func_args[i].name = arg.has_name? sv_to_sb(arg.name) : func->args.items[i].name;
         func_args[i].val = value;
 
-        if (!check_arg_name(func, sb_to_sv(func_args[i].name))) {
+        String_View sv = {0};
+        sb_to_sv(&sv, func_args[i].name);
+        
+        if (!check_arg_name(func, &sv)) {
             append_error(context, ERROR_UNEXPECTED_NAMED_ARG);
             free(func_args);
             free(va_args);
@@ -105,16 +115,14 @@ Value exec_func(Context *context, Func *func, Args args) {
     HashMap *local_vars = hm_alloc();
             
     for (size_t i = 0; i < func->args.count - HAS_VARIADIC(func); ++i) {
-        assert(hm_nput(local_vars, unwrapped[i].name.items, unwrapped[i].name.count, &unwrapped[i]) == 0);
+        assert(hm_nput(local_vars, unwrapped[i].name->items, unwrapped[i].name->count, &unwrapped[i]) == 0);
     }
     
     if (HAS_VARIADIC(func) && va_args->count > 0) {
         va_args_var = (Var*)malloc(sizeof(Var));
+        
         *va_args_var = (Var){
-            .name = (String_Builder){
-                .items = "...",
-                .count = 3,
-            },
+            .name = sb_new("..."),
             .val = (Value){
                 .type = VARIADIC_TYPE,
                 .as_ptr = va_args,
@@ -122,7 +130,7 @@ Value exec_func(Context *context, Func *func, Args args) {
             .constant = true,
         };
         
-        assert(hm_nput(local_vars, va_args_var->name.items, va_args_var->name.count, va_args_var) == 0);
+        assert(hm_nput(local_vars, va_args_var->name->items, va_args_var->name->count, va_args_var) == 0);
     }
 
     Context local_context = {
@@ -176,8 +184,8 @@ Value print_func(Context *context, Context *fn_context) {
         return ret;
     }
 
-    sb_print(formated.as_str);
-    free(formated.as_str.items);
+    sb_pprint((String_Builder*)formated.as_ptr);
+    da_pfree((String_Builder*)formated.as_ptr);
     return ret;
 }
 
@@ -198,9 +206,11 @@ Value format_func(Context *context, Context *fn_context) {
     
     Variadic *va_args = get_va_args(fn_context);
 
-    String_View fmt_sv = sb_to_sv(fmt->val.as_str);
-    ret.as_str = (String_Builder){0};
-    format_str(&ret.as_str, context, fmt_sv, va_args);
+    String_View fmt_sv = {0};
+    sb_to_sv(&fmt_sv, fmt->val.as_ptr);
+    
+    ret.as_ptr = sb_alloc();
+    format_str(ret.as_ptr, context, fmt_sv, va_args);
     return ret;
 }
 

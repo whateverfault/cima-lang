@@ -11,8 +11,19 @@ typedef struct {
     size_t capacity;
 } Errors;
 
-typedef struct {
-    String_Builder name;
+typedef struct ArrayElements {
+    Value *items;
+    size_t count;
+    size_t capacity;
+} ArrayElements;
+
+typedef struct Array {
+    ArrayElements els;
+    ValueType *el_type;
+} Array;
+
+typedef struct Var{
+    String_Builder *name;
     Value val;
     bool constant;
 } Var;
@@ -20,7 +31,7 @@ typedef struct {
 typedef struct Func Func;
 #define FUNC_FIELDS          \
     FuncKind kind;           \
-    String_Builder name;     \
+    String_Builder *name;     \
     Patterns args;           \
 
 typedef struct HashMap HashMap;
@@ -62,13 +73,14 @@ void context_free(Context *context);
 bool has_errors(Context *context);
 void append_error(Context *context, ErrorKind err);
 
-bool resolve_name(Context *context, String_View name_sv, Var **var);
+bool resolve_name(Context *context, String_View *name_sv, Var **var);
 bool resolve_name_cstr(Context *context, char *name, Var **var);
-bool get_func(Context *context, String_View name_sv, Func **func);
-Value get_node_value(Context *context, AST_Node *node);
+bool get_func(Context *context, String_View *name_sv, Func **func);
 
+Value execute_arr_expr(Context *context, AST_Node *node);
+Value execute_call_expr(Context *context, AST_Node *node);
 Value execute_expr(Context *context, AST_Node *expr);
-void execute_nodes(Context *context, Nodes nodes);
+void execute_nodes(Context *context, Nodes *nodes);
 Value execute(Context *context, AST_Node *node);
 void execute_program(Context *context, AST_NodeProgram *program);
 

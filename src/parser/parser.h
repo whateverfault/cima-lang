@@ -22,6 +22,7 @@ typedef enum {
     ERROR_RECURSION_LIMIT_EXCEEDED,
     ERROR_UNEXPECTED_NAMED_ARG,
     ERROR_FORMAT_MISMATCHES_VA_ARGS_COUNT,
+    ERROR_ARGS_AFTER_VA_ARG,
 
     ERROR_INCOMPATIBLE_TYPES,
     ERROR_EMPTY_CHAR_LIT,
@@ -36,6 +37,7 @@ typedef enum {
     AST_CALL,
     AST_FUNC,
     AST_LET,
+    AST_ARR,
     AST_BLOCK,
     AST_PROGRAM,
     AST_ERROR,
@@ -70,15 +72,9 @@ typedef struct Value{
     union {
         INT_CTYPE as_int;
         FLOAT_CTYPE as_float;
-        String_Builder as_str;
         void *as_ptr;
     };
 } Value;
-
-typedef struct {
-    Value val;
-    ErrorKind err;
-} Output;
 
 typedef struct {
     AST_Node *node;
@@ -93,7 +89,7 @@ typedef struct {
 } Args;
 
 typedef struct {
-    String_Builder name;
+    String_Builder *name;
     ValueType *type;
 } Pattern;
 
@@ -122,7 +118,7 @@ typedef struct {
 
 typedef struct {
     AST_FIELDS
-    BinaryOp op;
+    UnaryOp op;
     AST_Node *expr;
 } AST_NodeUnOp;
 
@@ -154,6 +150,7 @@ typedef struct {
 typedef struct {
     AST_FIELDS
     String_View name;
+    ValueType *type;
     AST_Node *initializer;
     bool has_initializer;
     bool constant;
@@ -172,6 +169,11 @@ typedef struct {
 typedef struct {
     AST_FIELDS
     Nodes nodes;
+} AST_NodeArray;
+
+typedef struct {
+    AST_FIELDS
+    Nodes nodes;
     AST_Node *ret_expr;
 } AST_NodeBlock;
 
@@ -185,12 +187,12 @@ void args_free(Args args);
 void ast_free(AST_Node *root);
 
 Value alloc_value(ValueType *type);
-Output alloc_output(ValueType *type);
 AST_NodeBinOp *alloc_binop_expr(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
 AST_NodeUnOp *alloc_unop_expr(AST_Node *expr, UnaryOp op);
 AST_NodeLit *alloc_lit_expr(Value val);
 AST_NodeName *alloc_name_expr(String_View sb);
 AST_NodeError *alloc_error(ErrorKind err);
+AST_NodeArray *alloc_arr_node(Nodes nodes);
 
 ErrorKind parse_type(Lexer *l, ValueType **type);
 

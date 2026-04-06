@@ -73,7 +73,11 @@ void print_error(ErrorKind err) {
             printf("Format mismatches variadic arguments count.\n");
         } break;
 
-        default: break;
+        case ERROR_ARGS_AFTER_VA_ARG: {
+            printf("Unexpected argument after variadic.\n");
+        } break;
+
+        default: assert(0 && "UNREACHABLE");
     }
 }
 
@@ -96,9 +100,12 @@ int main(int argc, char **argv) {
     
     Context context = {0};
     context_init(&context);
+
+    String_View source_sv = {0};
+    sb_to_sv(&source_sv, &source_sb);
     
     Lexer l = {
-        .source = sb_to_sv(source_sb),
+        .source = source_sv,
         .pos = 0,
     };
     

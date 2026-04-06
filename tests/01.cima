@@ -5,6 +5,6 @@
 let hello = "Hello"
 let world = "World"
 
-print("1. Hello, World!\n")
+print(msg: "1. Hello, World!\n")
 println("2. {hello}, {}!", world)
 println("3. {"Hello, {world}!"}")
