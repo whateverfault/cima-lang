@@ -694,6 +694,38 @@ AST_Node *parse_for_stmt(Lexer *l) {
     return (void*)alloc_for_stmt(initializer, condition, next, body);
 }
 
+AST_Node *parse_while_stmt(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_WHILE);
+
+    lexer_next(l);
+    
+    AST_Node *condition = parse(l);
+    if (condition->kind == AST_ERROR) {
+        return condition;
+    }
+
+    AST_Node *body = parse_block_expr(l);
+    if (body->kind == AST_ERROR) {
+        ast_free(condition);
+        return body;
+    }
+    
+    return (void*)alloc_for_stmt(NULL, condition, NULL, body);
+}
+
+AST_Node *parse_forever_stmt(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_FOREVER);
+
+    lexer_next(l);
+    
+    AST_Node *body = parse_block_expr(l);
+    if (body->kind == AST_ERROR) {
+        return body;
+    }
+    
+    return (void*)alloc_for_stmt(NULL, NULL, NULL, body);
+}
+
 AST_Node *parse_prim_expr(Lexer *l) {
     switch (l->cur.kind) {
         case TOKEN_KW_TRUE:
@@ -1182,6 +1214,14 @@ AST_Node *parse_stmt(Lexer *l) {
         case TOKEN_KW_FOR: {
             node = parse_for_stmt(l);
         } break;
+
+        case TOKEN_KW_WHILE: {
+            node = parse_while_stmt(l);
+        } break;
+
+        case TOKEN_KW_FOREVER: {
+            node = parse_forever_stmt(l);
+        } break;
             
         case TOKEN_KW_CONST: {
             node = parse_const_stmt(l);
@@ -1201,7 +1241,9 @@ AST_Node *parse(Lexer *l) {
     switch (l->cur.kind) {
         case TOKEN_KW_LET:
         case TOKEN_KW_CONST:
-        case TOKEN_KW_FOR: {
+        case TOKEN_KW_FOR:
+        case TOKEN_KW_WHILE:
+        case TOKEN_KW_FOREVER:{
             node = parse_stmt(l);
         } break;
             

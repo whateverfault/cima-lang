@@ -295,6 +295,12 @@ Token get_lit_token(Lexer *l) {
         else if (sv_cmp_cstr(&tok.val, "for")) {
             tok.kind = TOKEN_KW_FOR;
         }
+        else if (sv_cmp_cstr(&tok.val, "while")) {
+            tok.kind = TOKEN_KW_WHILE;
+        }
+        else if (sv_cmp_cstr(&tok.val, "forever")) {
+            tok.kind = TOKEN_KW_FOREVER;
+        }
         else if (sv_cmp_cstr(&tok.val, "if")) {
             tok.kind = TOKEN_KW_IF;
         }

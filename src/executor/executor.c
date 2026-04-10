@@ -183,20 +183,27 @@ void register_var(Context *context, AST_Node *node) {
     var->constant = let_node->constant;
 }
 
-void execute_for_loop(Context *context, AST_Node *node) {
+void execute_loop_stmt(Context *context, AST_Node *node) {
     assert(node->kind == AST_FOR);
 
     AST_NodeForStmt *for_node = (void*)node;
 
-    execute(context, for_node->initializer);
-    if (has_errors(context)) {
-        return;
+    if (for_node->initializer != NULL) {
+        execute(context, for_node->initializer);
+        if (has_errors(context)) {
+            return;
+        }
     }
 
     while (true) {
-        Value condition = execute(context, for_node->condition);
-        if (has_errors(context)) {
-            return;
+        Value condition = create_value(BOOL_TYPE);
+        condition.as_int = true;
+        
+        if (for_node->condition != NULL) {
+            condition = execute(context, for_node->condition);
+            if (has_errors(context)) {
+                return;
+            }
         }
 
         bool condition_value = to_bool(context, condition);
@@ -212,10 +219,12 @@ void execute_for_loop(Context *context, AST_Node *node) {
         if (has_errors(context)) {
             return;
         }
-        
-        execute(context, for_node->next);
-        if (has_errors(context)) {
-            return;
+
+        if (for_node->next != NULL) {
+            execute(context, for_node->next);
+            if (has_errors(context)) {
+                return;
+            }
         }
     }
 }
@@ -311,9 +320,7 @@ Value execute_binop(Context *context, AST_Node *root) {
             String_Builder *sb = sb_alloc();
             sv_to_sb(&name_sv, sb);
             
-            var = alloc_var(sb, rhs, var->constant);
-            hm_nput(context->scope.vars, name_sv.items, name_sv.count, var);
-
+            var->val = rhs;
             val = rhs;
         } break;
             
@@ -602,11 +609,10 @@ Value execute(Context *context, AST_Node *node) {
         case AST_LET: {
             register_var(context, node);
         } break;
-
+        
         case AST_FOR: {
-            execute_for_loop(context, node);
+            execute_loop_stmt(context, node);
         } break;
-
 
         default: {
             value = execute_expr(context, node);

@@ -54,6 +54,8 @@ typedef enum {
     TOKEN_KW_ELIF,
     TOKEN_KW_ELSE,
     TOKEN_KW_FOR,
+    TOKEN_KW_WHILE,
+    TOKEN_KW_FOREVER,
     TOKEN_KW_CONST,
     TOKEN_KW_LET,
     TOKEN_KW_TRUE,

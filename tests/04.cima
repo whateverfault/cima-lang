@@ -11,4 +11,4 @@ else {
     "You entered something else"
 }
 
-println(res)
+println("{res}")
