@@ -2,7 +2,7 @@
 #define PARSER_H
 
 #include "lexer/lexer.h"
-#include "../types/type.h"
+#include "types/type.h"
 
 #define AST_FIELDS AST_Kind kind;
 
@@ -16,6 +16,7 @@ typedef enum {
     ERROR_UNEXPECTED_TOKEN,
     ERROR_NOT_DEFINED,
     ERROR_CANNOT_ASSIGN_TO_CONST,
+    ERROR_CANNOT_REASSIGN_CONST,
 
     ERROR_TOO_FEW_ARGS,
     ERROR_TOO_MANY_ARGS,
@@ -27,6 +28,8 @@ typedef enum {
     ERROR_INCOMPATIBLE_TYPES,
     ERROR_EMPTY_CHAR_LIT,
     ERROR_MULTI_CHARACTER_CHAR_LIT,
+
+    ERROR_CLOSED_STDIN,
 } ErrorKind;
 
 typedef enum {
@@ -35,7 +38,8 @@ typedef enum {
     AST_LIT,
     AST_NAME,
     AST_CALL,
-    AST_FUNC,
+    AST_INDEX,
+    AST_FN,
     AST_LET,
     AST_ARR,
     AST_BLOCK,
@@ -66,7 +70,7 @@ typedef enum {
 typedef struct AST_Node AST_Node;
 typedef struct AST_NodeName AST_NodeName;
 
-typedef struct Value{
+typedef struct Value {
     ValueType *type;
 
     union {
@@ -140,6 +144,12 @@ typedef struct {
 
 typedef struct {
     AST_FIELDS
+    AST_Node *node;
+    AST_Node *index;
+} AST_NodeIndex;
+
+typedef struct {
+    AST_FIELDS
     String_View name;
     Patterns args;
     AST_Node *body;
@@ -186,7 +196,9 @@ void patterns_free(Patterns patterns);
 void args_free(Args args);
 void ast_free(AST_Node *root);
 
-Value alloc_value(ValueType *type);
+ValueTypeArray *alloc_arr_type(ValueType *el_type);
+Value create_value(ValueType *type);
+
 AST_NodeBinOp *alloc_binop_expr(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
 AST_NodeUnOp *alloc_unop_expr(AST_Node *expr, UnaryOp op);
 AST_NodeLit *alloc_lit_expr(Value val);

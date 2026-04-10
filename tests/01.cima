@@ -1,10 +1,6 @@
 # Comment
 #~ Multi-Line Comment ~#
 
-
-let hello = "Hello"
-let world = "World"
-
-print(msg: "1. Hello, World!\n")
-println("2. {hello}, {}!", world)
-println("3. {"Hello, {world}!"}")
+println("What's your name?")
+let name = readln()
+println("Hello, {}!", name)

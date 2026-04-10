@@ -6,9 +6,7 @@
 #include "executor/executor.h"
 
 Value binary_plus(Context *context, Value lhs, Value rhs) {
-    // TODO: Implement string concatenation
-    
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -17,6 +15,8 @@ Value binary_plus(Context *context, Value lhs, Value rhs) {
         case TYPE_BOOL:
         case TYPE_INT: {
             switch (rhs_type->tag) {
+                case TYPE_CHAR:
+                case TYPE_BOOL:
                 case TYPE_INT: {
                     val.as_int = lhs.as_int + rhs.as_int;
                     val.type = INT_TYPE;
@@ -28,7 +28,8 @@ Value binary_plus(Context *context, Value lhs, Value rhs) {
                     val.type = FLOAT_TYPE;
                     return val;
                 }
-
+                
+                    
                 default: {
                     append_error(context, ERROR_INCOMPATIBLE_TYPES);
                     return val;
@@ -131,7 +132,7 @@ Value binary_plus(Context *context, Value lhs, Value rhs) {
 }
 
 Value binary_minus(Context *context, Value lhs, Value rhs) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -196,7 +197,7 @@ Value binary_minus(Context *context, Value lhs, Value rhs) {
 }
 
 Value binary_mul(Context *context, Value lhs, Value rhs) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -256,7 +257,7 @@ Value binary_mul(Context *context, Value lhs, Value rhs) {
 }
 
 Value binary_div(Context *context, Value lhs, Value rhs) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -336,7 +337,7 @@ Value binary_div(Context *context, Value lhs, Value rhs) {
 }
 
 Value binary_mod(Context *context, Value lhs, Value rhs) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -416,7 +417,7 @@ Value binary_mod(Context *context, Value lhs, Value rhs) {
 }
 
 Value binary_pow(Context *context, Value lhs, Value rhs) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
 
     ValueType *lhs_type = (void*)lhs.type;
     ValueType *rhs_type = (void*)rhs.type;
@@ -476,7 +477,7 @@ Value binary_pow(Context *context, Value lhs, Value rhs) {
 }
 
 Value unary_plus(Context *context, Value x) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
     
     ValueType *val_type = (void*)val.type;
     
@@ -500,7 +501,7 @@ Value unary_plus(Context *context, Value x) {
 }
 
 Value unary_minus(Context *context, Value x) {
-    Value val = alloc_value(VOID_TYPE);
+    Value val = create_value(VOID_TYPE);
     
     ValueType *val_type = (void*)val.type;
     

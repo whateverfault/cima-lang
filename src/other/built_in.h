@@ -14,23 +14,17 @@
 #include "executor/executor.h"
 #include "executor/funcs.h"
 
-static String_Builder pi_sb = {
-    .items = "pi",
-    .count = 2,
-    .capacity = 2,
-};
+#define CSTR_TO_SB(cstr) (String_Builder){       \
+    .items=   (cstr),                            \
+    .count=   (sizeof(cstr)/sizeof((cstr)[0])-1),\
+    .capacity=(sizeof(cstr)/sizeof((cstr)[0])-1) \
+}
 
-static String_Builder e_sb = {
-    .items = "e",
-    .count = 1,
-    .capacity = 1,
-};
+static String_Builder pi_sb = CSTR_TO_SB("pi");
 
-static String_Builder nan_sb = {
-    .items = "nan",
-    .count = 3,
-    .capacity = 3,
-};
+static String_Builder e_sb = CSTR_TO_SB("e");
+
+static String_Builder nan_sb = CSTR_TO_SB("nan");
 
 static Var builtin_vars[] = {
     (Var){
@@ -61,17 +55,9 @@ static Var builtin_vars[] = {
 
 #define builtin_vars_count sizeof(builtin_vars)/sizeof(builtin_vars[0])
 
-static String_Builder msg_sb = {
-    .items = "msg",
-    .count = 3,
-    .capacity = 3,
-};
-
-static String_Builder ellipsis_sb = {
-    .items = "...",
-    .count = 3,
-    .capacity = 3,
-};
+static String_Builder msg_sb = CSTR_TO_SB("msg");
+static String_Builder args_sb = CSTR_TO_SB("args");
+static String_Builder string_sb = CSTR_TO_SB("string");
 
 static Pattern print_pattern[] = {
     (Pattern){
@@ -79,10 +65,19 @@ static Pattern print_pattern[] = {
         .type = STR_TYPE,
     },
     (Pattern){
-        .name = &ellipsis_sb,
+        .name = &args_sb,
         .type = VARIADIC_TYPE,
     },
 };
+
+static Pattern str_pattern[] = {
+    (Pattern){
+        .name = &string_sb,
+        .type = STR_TYPE,
+    },
+};
+
+static Pattern empty_pattern[] = {0};
 
 static const Patterns format_patterns = (Patterns){
     .items = print_pattern,
@@ -90,39 +85,75 @@ static const Patterns format_patterns = (Patterns){
     .capacity = 2,
 };
 
-static String_Builder format_sb = {
-    .items = "format",
-    .count = 6,
-    .capacity = 6,
+static const Patterns str_patterns = (Patterns){
+    .items = str_pattern,
+    .count = 1,
+    .capacity = 1,
 };
 
-static String_Builder print_sb = {
-    .items = "print",
-    .count = 5,
-    .capacity = 5,
+static const Patterns empty_patterns = (Patterns){
+    .items = empty_pattern,
+    .count = 0,
+    .capacity = 0,
 };
 
-static String_Builder println_sb = {
-    .items = "println",
-    .count = 7,
-    .capacity = 7,
-};
+static String_Builder format_sb = CSTR_TO_SB("format");
+static String_Builder print_sb = CSTR_TO_SB("print");
+static String_Builder println_sb = CSTR_TO_SB("println");
+static String_Builder read_sb = CSTR_TO_SB("read");
+static String_Builder readln_sb = CSTR_TO_SB("readln");
+static String_Builder trim_sb = CSTR_TO_SB("trim");
+static String_Builder trim_left_sb = CSTR_TO_SB("trim_left");
+static String_Builder trim_right_sb = CSTR_TO_SB("trim_right");
 
 static FuncBuiltIn builtin_funcs[] = {
     (FuncBuiltIn){
         .name = &format_sb,
         .func = format_func,
         .args = format_patterns,
+        .constant = true,
     },
     (FuncBuiltIn){
         .name = &print_sb,
         .func = print_func,
         .args = format_patterns,
+        .constant = true,
     },
     (FuncBuiltIn){
         .name = &println_sb,
         .func = println_func,
         .args = format_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &read_sb,
+        .func = read_func,
+        .args = empty_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &readln_sb,
+        .func = readln_func,
+        .args = empty_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &trim_sb,
+        .func = trim_func,
+        .args = str_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &trim_left_sb,
+        .func = trim_left_func,
+        .args = str_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &trim_right_sb,
+        .func = trim_right_func,
+        .args = str_patterns,
+        .constant = true,
     },
 };
 

@@ -1,8 +1,10 @@
-let x = 1
-let x = 2
-my_print(format("{}", x))
+let msg = "Hello" + ',' + " World!";
+my_print(msg);
 
-#let a: [] = [67, 69];
-#println("{}", a)
-
-const fn my_print(msg) => println(msg)
+fn my_print(msg: str, args: ...) : void {
+    my_print_inside_my_print(msg, args)
+    
+    fn my_print_inside_my_print(msg: str, args: ...) : void {
+        println(msg: msg, args: args)
+    }
+}

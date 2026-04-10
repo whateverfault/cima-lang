@@ -1,10 +1,9 @@
 #include "type.h"
 
 #include "parser/parser.h"
-#include "executor/funcs.h"
 #include "executor/executor.h"
 
-void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variadic *va_args) {
+void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array *va_args) {
     Lexer l = {
         .source = fmt_sv,
         .skipped = {0},
@@ -26,12 +25,12 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variad
         lexer_next(&l);
         
         if (l.cur.kind == TOKEN_RBRACE) {
-            if (va_args == NULL || va_arg_pos >= va_args->count) {
+            if (va_args == NULL || va_arg_pos >= va_args->els.count) {
                 append_error(context, ERROR_FORMAT_MISMATCHES_VA_ARGS_COUNT);
                 return;
             }
-
-            to_str(sb, context, va_args->args[va_arg_pos]);
+            
+            to_str(sb, context, va_args->els.items[va_arg_pos]);
             ++va_arg_pos;
         }
         else {
@@ -50,7 +49,7 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variad
 
             if (val.type->tag == TYPE_STR) {
                 String_View sv = {0};
-                sb_to_sv(&sv, val.as_ptr);
+                sv_from_sb(&sv, val.as_ptr);
                 format_str(sb, context, sv, va_args);
             }
             else {
@@ -67,6 +66,11 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variad
         lexer_next(&l);
     }
 
+    if (va_args != NULL && va_arg_pos != va_args->els.count) {
+        append_error(context, ERROR_FORMAT_MISMATCHES_VA_ARGS_COUNT);
+        return;
+    }
+    
     sb_append_sv(sb, &l.skipped);
 }
 

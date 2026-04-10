@@ -41,6 +41,10 @@ void print_error(ErrorKind err) {
             printf("Cannot assign to constant.\n");
         } break;
 
+        case ERROR_CANNOT_REASSIGN_CONST: {
+            printf("Cannot reassign constant.\n");
+        } break;
+
         case ERROR_TOO_FEW_ARGS: {
             printf("Too few arguments.\n");
         } break;
@@ -77,6 +81,10 @@ void print_error(ErrorKind err) {
             printf("Unexpected argument after variadic.\n");
         } break;
 
+        case ERROR_CLOSED_STDIN: {
+            printf("Stdin is closed.\n");
+        } break;
+            
         default: assert(0 && "UNREACHABLE");
     }
 }
@@ -102,7 +110,7 @@ int main(int argc, char **argv) {
     context_init(&context);
 
     String_View source_sv = {0};
-    sb_to_sv(&source_sv, &source_sb);
+    sv_from_sb(&source_sv, &source_sb);
     
     Lexer l = {
         .source = source_sv,

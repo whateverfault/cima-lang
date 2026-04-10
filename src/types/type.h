@@ -78,11 +78,35 @@ static const ValueType variadic_type = (ValueType){
 #define VOID_TYPE (void*)&void_type
 #define VARIADIC_TYPE (void*)&variadic_type
 
+static const ValueTypeArray array_any_type = (ValueTypeArray){
+    .tag = TYPE_ARRAY,
+    .el_type = ANY_TYPE,
+};
+
+static const ValueTypeArray array_va_type = (ValueTypeArray){
+    .tag = TYPE_ARRAY,
+    .el_type = VARIADIC_TYPE,
+};
+
+#define ARRAY_ANY_TYPE (void*)&array_any_type
+#define ARRAY_VA_TYPE (void*)&array_va_type
+
 typedef struct Variadic Variadic;
 typedef struct Context Context;
 typedef struct Value Value;
 
-void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Variadic *va_args);
+typedef struct ArrayElements {
+    Value *items;
+    size_t count;
+    size_t capacity;
+} ArrayElements;
+
+typedef struct Array {
+    ArrayElements els;
+    ValueType *el_type;
+} Array;
+
+void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array *va_args);
 void to_str(String_Builder *sb, Context *context, Value val);
 
 #endif //TYPE_H

@@ -3,24 +3,11 @@
 
 #include <stdbool.h>
 
-#include "parser/parser.h"
-
 typedef struct {
     ErrorKind *items;
     size_t count;
     size_t capacity;
 } Errors;
-
-typedef struct ArrayElements {
-    Value *items;
-    size_t count;
-    size_t capacity;
-} ArrayElements;
-
-typedef struct Array {
-    ArrayElements els;
-    ValueType *el_type;
-} Array;
 
 typedef struct Var{
     String_Builder *name;
@@ -31,8 +18,9 @@ typedef struct Var{
 typedef struct Func Func;
 #define FUNC_FIELDS          \
     FuncKind kind;           \
-    String_Builder *name;     \
+    String_Builder *name;    \
     Patterns args;           \
+    bool constant;
 
 typedef struct HashMap HashMap;
 typedef struct {
@@ -41,31 +29,10 @@ typedef struct {
 } Scope;
 
 typedef struct Context{
+    Context *global;
     Scope scope;
     Errors *errors;
 } Context;
-
-typedef Value (*func_t)(Context *context, Context *fn_context);
-
-typedef enum {
-    FUNC_BUILT_IN,
-    FUNC_CUSTOM,
-} FuncKind;
-
-typedef struct Func {
-    FUNC_FIELDS
-} Func;
-
-typedef struct {
-    FUNC_FIELDS
-    func_t func;
-} FuncBuiltIn;
-
-typedef struct {
-    FUNC_FIELDS
-    AST_Node *body;
-    bool constant;
-} FuncCustom;
 
 void context_init(Context *context);
 void context_free(Context *context);
@@ -73,7 +40,9 @@ void context_free(Context *context);
 bool has_errors(Context *context);
 void append_error(Context *context, ErrorKind err);
 
-bool resolve_name(Context *context, String_View *name_sv, Var **var);
+Array *alloc_arr(ValueType *el_type);
+
+bool resolve_name_sv(Context *context, String_View *name_sv, Var **var);
 bool resolve_name_cstr(Context *context, char *name, Var **var);
 bool get_func(Context *context, String_View *name_sv, Func **func);
 

@@ -1,1 +1,2 @@
-fn va_args_func(va_args: ...) => println(va_args);
+let a = [67, 69]
+println("{}", a)
