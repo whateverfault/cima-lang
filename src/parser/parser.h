@@ -17,6 +17,7 @@ typedef enum {
     ERROR_NOT_DEFINED,
     ERROR_CANNOT_ASSIGN_TO_CONST,
     ERROR_CANNOT_REASSIGN_CONST,
+    ERROR_INDEX_OUT_OF_BOUNDS,
 
     ERROR_TOO_FEW_ARGS,
     ERROR_TOO_MANY_ARGS,
@@ -43,6 +44,7 @@ typedef enum {
     AST_LET,
     AST_ARR,
     AST_BLOCK,
+    AST_IF,
     AST_PROGRAM,
     AST_ERROR,
 } AST_Kind;
@@ -58,11 +60,14 @@ typedef enum {
     BINOP_LT,
     BINOP_GTEQ,
     BINOP_LTEQ,
-
     BINOP_EQ,
+    BINOP_NEQ,
+
+    BINOP_ASIGN,
 } BinaryOp;
 
 typedef enum {
+    UNOP_NOT,
     UNOP_PLUS,
     UNOP_MINUS,
 } UnaryOp;
@@ -186,6 +191,14 @@ typedef struct {
     Nodes nodes;
     AST_Node *ret_expr;
 } AST_NodeBlock;
+
+typedef struct {
+    AST_FIELDS
+    AST_Node *condition;
+    AST_Node *body;
+    Nodes elif_branches;
+    AST_Node *else_branch;
+} AST_NodeBranch;
 
 typedef struct {
     bool right_associative;

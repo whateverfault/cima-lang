@@ -201,6 +201,19 @@ AST_NodeBlock *alloc_block_expr(Nodes nodes, AST_Node *ret_expr) {
     return tok;
 }
 
+AST_NodeBranch *alloc_branch_expr(AST_Node *condition, AST_Node *body, Nodes elif_branches, AST_Node *else_branch) {
+    AST_NodeBranch *tok = (AST_NodeBranch*)malloc(sizeof(AST_NodeBranch));
+    assert(tok != NULL && "Memory allocation failed");
+
+    tok->kind = AST_IF;
+    tok->condition = condition;
+    tok->body = body;
+    tok->elif_branches = elif_branches;
+    tok->else_branch = else_branch;
+    
+    return tok;
+}
+
 AST_NodeProgram *alloc_program(Nodes nodes) {
     AST_NodeProgram *tok = (AST_NodeProgram*)malloc(sizeof(AST_NodeProgram));
     assert(tok != NULL && "Memory allocation failed");
@@ -243,11 +256,13 @@ BinaryOp get_binop(Token tok) {
         case TOKEN_SLASH: return BINOP_DIV;
         case TOKEN_PERCENT: return BINOP_MOD;
         case TOKEN_CARET: return BINOP_POW;
-        case TOKEN_EQ: return BINOP_EQ;
+        case TOKEN_ASIGN: return BINOP_ASIGN;
         case TOKEN_GT: return BINOP_GT;
         case TOKEN_LT: return BINOP_LT;
         case TOKEN_GTEQ: return BINOP_GTEQ;
         case TOKEN_LTEQ: return BINOP_LTEQ;
+        case TOKEN_EQ: return BINOP_EQ;
+        case TOKEN_NEQ: return BINOP_NEQ;
             
         default: break;
     }
@@ -259,6 +274,7 @@ UnaryOp get_unop(Token tok) {
     assert(is_unop(tok) && "Expected unary operation");
     
     switch (tok.kind) {
+        case TOKEN_NOT: return UNOP_NOT;
         case TOKEN_PLUS: return UNOP_PLUS;
         case TOKEN_MINUS: return UNOP_MINUS;
             
@@ -275,7 +291,7 @@ Precedence get_precedence(Token tok) {
         BinaryOp binop = get_binop(tok);
         
         switch (binop) {
-            case BINOP_EQ: {
+            case BINOP_ASIGN: {
                 prec.val = 0;
                 prec.right_associative = true;
             } break;
@@ -518,6 +534,80 @@ AST_Node *parse_block_expr(Lexer *l) {
     return (void*)alloc_block_expr(nodes, ret_expr);
 }
 
+AST_Node *parse_elif_expr(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_ELIF);
+
+    lexer_next(l);
+
+    AST_Node *condition = parse_expr(l, 0);
+    if (condition->kind == AST_ERROR) {
+        ast_free(condition);
+        return condition;
+    }
+    
+    AST_Node *body = parse_block_expr(l);
+    if (body->kind == AST_ERROR) {
+        ast_free(body);
+        return body;
+    }
+
+    Nodes elif_branches = {0};
+    
+    return (void*)alloc_branch_expr(condition, body, elif_branches, NULL);
+}
+
+AST_Node *parse_else_expr(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_ELSE);
+
+    lexer_next(l);
+    
+    AST_Node *body = parse_block_expr(l);
+    return body;
+}
+
+AST_Node *parse_if_expr(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_IF);
+
+    lexer_next(l);
+
+    AST_Node *condition = parse_expr(l, 0);
+    if (condition->kind == AST_ERROR) {
+        return condition;
+    }
+    
+    AST_Node *body = parse_block_expr(l);
+    if (body->kind == AST_ERROR) {
+        ast_free(condition);
+        return body;
+    }
+    
+    Nodes elif_branches = {0};
+    while (l->cur.kind == TOKEN_KW_ELIF) {
+        AST_Node *elif = parse_elif_expr(l);
+        if (elif->kind == AST_ERROR) {
+            ast_free(condition);
+            ast_free(body);
+            nodes_free(elif_branches);
+            return elif;
+        }
+
+        da_append(&elif_branches, elif);
+    }
+
+    AST_Node *else_branch = NULL;
+    if (l->cur.kind == TOKEN_KW_ELSE) {
+        else_branch = parse_else_expr(l);
+        if (else_branch->kind == AST_ERROR) {
+            ast_free(condition);
+            ast_free(body);
+            nodes_free(elif_branches);
+            return else_branch;
+        }
+    }
+        
+    return (void*)alloc_branch_expr(condition, body, elif_branches, else_branch);
+}
+
 AST_Node *parse_prim_expr(Lexer *l) {
     switch (l->cur.kind) {
         case TOKEN_KW_TRUE:
@@ -551,6 +641,10 @@ AST_Node *parse_prim_expr(Lexer *l) {
             
         case TOKEN_LBRACE: {
             return parse_block_expr(l);
+        }
+
+        case TOKEN_KW_IF: {
+            return parse_if_expr(l);
         }
             
         default: {
@@ -931,7 +1025,7 @@ AST_Node *parse_let_stmt(Lexer *l, bool constant) {
         }
     }
     
-    if (l->cur.kind != TOKEN_EQ) {
+    if (l->cur.kind != TOKEN_ASIGN) {
         AST_NodeLet *let_node = alloc_let_stmt(name, type, NULL, false, constant);
         return (void*)let_node;
     }

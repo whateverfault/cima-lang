@@ -126,7 +126,7 @@ bool is_assignment(AST_Node *node) {
     bool result = node->kind == AST_BINOP;
     AST_NodeBinOp *op = (void*)node;
 
-    result &= op->op == BINOP_EQ;
+    result &= op->op == BINOP_ASIGN;
     return result;
 }
 
@@ -227,7 +227,31 @@ Value execute_binop(Context *context, AST_Node *root) {
             val = binary_pow(context, lhs, rhs);
         } break;
 
+        case BINOP_GT: {
+            val = binary_gt(context, lhs, rhs);
+        } break;
+            
+        case BINOP_LT: {
+            val = binary_lt(context, lhs, rhs);
+        } break;
+
+        case BINOP_GTEQ: {
+            val = binary_gteq(context, lhs, rhs);
+        } break;
+            
+        case BINOP_LTEQ: {
+            val = binary_lteq(context, lhs, rhs);
+        } break;
+            
         case BINOP_EQ: {
+            val = binary_eq(context, lhs, rhs);
+        } break;
+
+        case BINOP_NEQ: {
+            val = binary_neq(context, lhs, rhs);
+        } break;
+
+        case BINOP_ASIGN: {
             if (binop->lhs->kind != AST_NAME) {
                 append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
                 return val;
@@ -273,20 +297,16 @@ Value execute_unop(Context *context, AST_Node *root) {
     }
     
     switch (unop->op) {
+        case UNOP_NOT: {
+            val = unary_not(context, value);
+            return val;
+        }
         case UNOP_PLUS: {
             val = unary_plus(context, value);
-            if (has_errors(context)) {
-                return val;
-            }
-            
             return val;
         }
         case UNOP_MINUS: {
             val = unary_minus(context, value);
-            if (has_errors(context)) {
-                return val;
-            }
-            
             return val;
         }
         default: break;
@@ -310,7 +330,6 @@ Value execute_call_expr(Context *context, AST_Node *node) {
     return exec_func(context, func, call->args);
 }
 
-// TODO: Implement arrays/strings indexing
 Value execute_index_expr(Context *context, AST_Node *node) {
     assert(node->kind == AST_INDEX);
 
@@ -321,20 +340,51 @@ Value execute_index_expr(Context *context, AST_Node *node) {
     if (has_errors(context)) {
         return value;
     }
+
+    if (arr.type->tag != TYPE_STR && arr.type->tag != TYPE_ARRAY) {
+        append_error(context, ERROR_INCOMPATIBLE_TYPES);
+        return value;
+    }
     
     Value index = execute(context, index_node->index);
     if (has_errors(context)) {
         return value;
     }
-    
-    AST_NodeCall *call = (AST_NodeCall*)node;
-    Func *func = NULL;
-    if (!resolve_func(context, node, &func)) {
-        append_error(context, ERROR_NOT_DEFINED);
+
+    if (index.type->tag != TYPE_INT) {
+        append_error(context, ERROR_INCOMPATIBLE_TYPES);
         return value;
     }
+    
+    switch (arr.type->tag) {
+        case TYPE_ARRAY: {
+            Array *array = arr.as_ptr;
+            value = create_value(array->el_type);
 
-    return exec_func(context, func, call->args);
+            if (index.as_int < 0 || index.as_int >= array->els.count) {
+                append_error(context, ERROR_INDEX_OUT_OF_BOUNDS);
+                return value;
+            }
+            
+            value = array->els.items[index.as_int];
+            return value;
+        }
+
+        case TYPE_STR: {
+            String_Builder *str = arr.as_ptr;
+            value = create_value(CHAR_TYPE);
+
+            if (index.as_int < 0 || index.as_int >= str->count) {
+                append_error(context, ERROR_INDEX_OUT_OF_BOUNDS);
+                return value;
+            }
+            
+            value.as_int = str->items[index.as_int];
+            return value;
+        }
+
+        default: assert(0 && "UNREACHABLE");
+    }
 }
 
 Value execute_arr_expr(Context *context, AST_Node *node) {
@@ -391,6 +441,56 @@ Value execute_block_expr(Context *context, AST_Node *node) {
     return ret;
 }
 
+Value execute_if_expr(Context *context, AST_Node *node, bool *executed_ret) {
+    assert(node->kind == AST_IF);
+
+    bool executed = false;
+    
+    AST_NodeBranch *if_node = (void*)node;
+    Value value = create_value(VOID_TYPE);
+
+    Value condition = execute(context, if_node->condition);
+    if (has_errors(context)) {
+        return value;
+    }
+    
+    bool condition_value = to_bool(context, condition);
+    if (has_errors(context)) {
+        return value;
+    }
+    
+    if (condition_value) {
+        value = execute(context, if_node->body);
+        executed = true;
+        if (executed_ret != NULL) {
+            *executed_ret = executed;
+        }
+        
+        return value;
+    }
+
+    for (size_t i = 0; i < if_node->elif_branches.count; ++i) {
+        value = execute_if_expr(context, if_node->elif_branches.items[i], &executed);
+        if (executed_ret != NULL) {
+            *executed_ret = executed;
+        }
+        
+        if (executed) {
+            return value;
+        }
+    }
+
+    if (if_node->else_branch != NULL) {
+        value = execute_expr(context, if_node->else_branch);
+        executed = true;
+        if (executed_ret != NULL) {
+            *executed_ret = executed;
+        }
+    }
+    
+    return value;
+}
+
 Value execute_name_expr(Context *context, AST_Node *expr) {
     Value val = create_value(VOID_TYPE);
     
@@ -438,6 +538,10 @@ Value execute_expr(Context *context, AST_Node *expr) {
 
         case AST_BLOCK: {
             val = execute_block_expr(context, expr);
+        } break;
+
+        case AST_IF: {
+            val = execute_if_expr(context, expr, NULL);
         } break;
             
         case AST_ERROR: {

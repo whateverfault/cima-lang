@@ -17,11 +17,13 @@ bool is_binop(Token tok) {
         case TOKEN_SLASH:
         case TOKEN_PERCENT:
         case TOKEN_CARET:
-        case TOKEN_EQ:
+        case TOKEN_ASIGN:
         case TOKEN_GT:
         case TOKEN_LT:
         case TOKEN_GTEQ:
-        case TOKEN_LTEQ: {
+        case TOKEN_LTEQ:
+        case TOKEN_EQ:
+        case TOKEN_NEQ:{
             return true;
         }
 
@@ -31,6 +33,7 @@ bool is_binop(Token tok) {
 
 bool is_unop(Token tok) {
     switch (tok.kind) {
+        case TOKEN_NOT:
         case TOKEN_PLUS:
         case TOKEN_MINUS:{
             return true;
@@ -284,6 +287,18 @@ Token get_lit_token(Lexer *l) {
             tok.kind = TOKEN_KW_FN;
         }
 
+        if (sv_cmp_cstr(&tok.val, "if")) {
+            tok.kind = TOKEN_KW_IF;
+        }
+
+        if (sv_cmp_cstr(&tok.val, "elif")) {
+            tok.kind = TOKEN_KW_ELIF;
+        }
+
+        if (sv_cmp_cstr(&tok.val, "else")) {
+            tok.kind = TOKEN_KW_ELSE;
+        }
+
         if (sv_cmp_cstr(&tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
@@ -388,7 +403,7 @@ switch (CURRENT(l)) {
 
 Token get_eq_token(Lexer *l) {
     Token tok = {
-        .kind = TOKEN_EQ,
+        .kind = TOKEN_ASIGN,
         .val = (String_View){
             .items = l->source.items + l->pos,
             .count = 1,
@@ -396,8 +411,31 @@ Token get_eq_token(Lexer *l) {
     };
 
     ++l->pos;
-    if (INBOUNDS(l) && CURRENT(l) == '>') {
+    if (INBOUNDS(l) && CURRENT(l) == '=') {
+        tok.kind = TOKEN_EQ;
+        ++tok.val.count;
+        ++l->pos;
+    } else if (INBOUNDS(l) && CURRENT(l) == '>') {
         tok.kind = TOKEN_ARROW;
+        ++tok.val.count;
+        ++l->pos;
+    }
+
+    return tok;
+}
+
+Token get_not_token(Lexer *l) {
+    Token tok = {
+        .kind = TOKEN_NOT,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
+
+    ++l->pos;
+    if (INBOUNDS(l) && CURRENT(l) == '=') {
+        tok.kind = TOKEN_NEQ;
         ++tok.val.count;
         ++l->pos;
     }
@@ -528,6 +566,10 @@ Token lexer_next(Lexer *l) {
 
         case '.': {
             tok = get_dot_token(l);
+        } break;
+
+        case '!': {
+            tok = get_not_token(l);
         } break;
 
         case '#': {

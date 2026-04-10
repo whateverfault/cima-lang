@@ -17,7 +17,22 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array 
         sb_append_sv(sb, &l.skipped);
         
         if (l.cur.kind != TOKEN_LBRACE) {
+            if (l.cur.kind == TOKEN_CHAR) {
+                sb_appendc(sb, '\'');
+            }
+            else if (l.cur.kind == TOKEN_STR) {
+                sb_appendc(sb, '\"');
+            }
+            
             sb_append_sv(sb, &l.cur.val);
+
+            if (l.cur.kind == TOKEN_CHAR) {
+                sb_appendc(sb, '\'');
+            }
+            else if (l.cur.kind == TOKEN_STR) {
+                sb_appendc(sb, '\"');
+            }
+            
             lexer_next(&l);
             continue;
         }
@@ -51,9 +66,17 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array 
                 String_View sv = {0};
                 sv_from_sb(&sv, val.as_ptr);
                 format_str(sb, context, sv, va_args);
+                if (has_errors(context)) {
+                    ast_free(expr);
+                    return;
+                }
             }
             else {
                 to_str(sb, context, val);
+                if (has_errors(context)) {
+                    ast_free(expr);
+                    return;
+                }
             }
             ast_free(expr);
         }
@@ -123,7 +146,46 @@ void to_str(String_Builder *sb, Context *context, Value val) {
         } break;
             
         default: {
-            da_append(context->errors, ERROR_INCOMPATIBLE_TYPES);
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
         } break;
+    }
+}
+
+bool to_bool(Context *context, Value val) {
+    switch (val.type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
+        case TYPE_INT: {
+            return val.as_int != 0;
+        }
+
+        case TYPE_FLOAT: {
+            return val.as_float != 0.0;
+        }
+            
+        case TYPE_STR: {
+            String_Builder *sb = val.as_ptr;
+            return sb != NULL && sb->count != 0;
+        }
+
+        case TYPE_VARIADIC:
+        case TYPE_ARRAY: {
+            Array *arr = val.as_ptr;
+            return arr != NULL && arr->els.count != 0;
+        }
+        
+        case TYPE_ANY:
+        case TYPE_PTR: {
+            return val.as_ptr != NULL;
+        }
+
+        case TYPE_VOID: {
+            return false;
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return false;
+        }
     }
 }

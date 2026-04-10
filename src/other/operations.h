@@ -138,6 +138,8 @@ Value binary_minus(Context *context, Value lhs, Value rhs) {
     ValueType *rhs_type = (void*)rhs.type;
     
     switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
         case TYPE_INT: {
             switch (rhs_type->tag) {
                 case TYPE_INT:
@@ -203,6 +205,8 @@ Value binary_mul(Context *context, Value lhs, Value rhs) {
     ValueType *rhs_type = (void*)rhs.type;
     
     switch (lhs_type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
         case TYPE_INT: {
             switch (rhs_type->tag) {
                 case TYPE_INT:
@@ -263,6 +267,8 @@ Value binary_div(Context *context, Value lhs, Value rhs) {
     ValueType *rhs_type = (void*)rhs.type;
     
     switch (lhs_type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
         case TYPE_INT: {
             switch (rhs_type->tag) {
                 case TYPE_INT:
@@ -476,6 +482,339 @@ Value binary_pow(Context *context, Value lhs, Value rhs) {
     }
 }
 
+Value binary_gt(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+    
+    switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT:
+                case TYPE_CHAR:
+                case TYPE_BOOL:{
+                    val.as_int = lhs.as_int > rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_int = lhs.as_int > rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_FLOAT: {
+            switch (rhs_type->tag) {
+                case TYPE_BOOL:
+                case TYPE_CHAR:
+                case TYPE_INT: {
+                    val.as_float = lhs.as_float > rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_float = lhs.as_float > rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_lt(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+    
+    switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT:
+                case TYPE_CHAR:
+                case TYPE_BOOL:{
+                    val.as_int = lhs.as_int < rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_int = lhs.as_int < rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_FLOAT: {
+            switch (rhs_type->tag) {
+                case TYPE_BOOL:
+                case TYPE_CHAR:
+                case TYPE_INT: {
+                    val.as_float = lhs.as_float < rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_float = lhs.as_float < rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_gteq(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+    
+    switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT:
+                case TYPE_CHAR:
+                case TYPE_BOOL:{
+                    val.as_int = lhs.as_int >= rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_int = lhs.as_int >= rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_FLOAT: {
+            switch (rhs_type->tag) {
+                case TYPE_BOOL:
+                case TYPE_CHAR:
+                case TYPE_INT: {
+                    val.as_float = lhs.as_float >= rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_float = lhs.as_float >= rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_lteq(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+    
+    switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT:
+                case TYPE_CHAR:
+                case TYPE_BOOL:{
+                    val.as_int = lhs.as_int <= rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_int = lhs.as_int <= rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_FLOAT: {
+            switch (rhs_type->tag) {
+                case TYPE_BOOL:
+                case TYPE_CHAR:
+                case TYPE_INT: {
+                    val.as_float = lhs.as_float <= rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_float = lhs.as_float <= rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_eq(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+    
+    switch (lhs_type->tag) {
+        case TYPE_BOOL:
+        case TYPE_CHAR:
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT:
+                case TYPE_CHAR:
+                case TYPE_BOOL:{
+                    val.as_int = lhs.as_int == rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_int = lhs.as_int == rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_FLOAT: {
+            switch (rhs_type->tag) {
+                case TYPE_BOOL:
+                case TYPE_CHAR:
+                case TYPE_INT: {
+                    val.as_float = lhs.as_float == rhs.as_int;
+                    return val;
+                }
+
+                case TYPE_FLOAT: {
+                    val.as_float = lhs.as_float == rhs.as_float;
+                    return val;
+                }
+                    
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+
+        case TYPE_STR: {
+            switch (rhs_type->tag) {
+                case TYPE_STR: {
+                    val.as_int = true;
+                    
+                    String_Builder *lhs_str = lhs.as_ptr;
+                    String_Builder *rhs_str = rhs.as_ptr;
+
+                    if (lhs_str->count != rhs_str->count) {
+                        val.as_int = false;
+                        return val;
+                    }
+
+                    for (size_t i = 0; i < lhs_str->count; ++i) {
+                        if (lhs_str->items[i] != rhs_str->items[i]) {
+                            val.as_int = false;
+                            return val;
+                        }
+                    }
+                    
+                    return val;
+                }
+                
+                case TYPE_CHAR: {
+                    String_Builder *str = lhs.as_ptr;
+
+                    val.as_int = str->count == 1 && str->items[0] == (char)rhs.as_int;
+                    return val;
+                }
+                
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_neq(Context *context, Value lhs, Value rhs) {
+    Value val = binary_eq(context, lhs, rhs);
+    val.as_int = !val.as_int;
+    return val;
+}
+
 Value unary_plus(Context *context, Value x) {
     Value val = create_value(VOID_TYPE);
     
@@ -503,9 +842,9 @@ Value unary_plus(Context *context, Value x) {
 Value unary_minus(Context *context, Value x) {
     Value val = create_value(VOID_TYPE);
     
-    ValueType *val_type = (void*)val.type;
-    
-    switch (val_type->tag) {
+    switch (x.type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
         case TYPE_INT: {
             val.as_int = -x.as_int;
             val.type = INT_TYPE;
@@ -521,6 +860,12 @@ Value unary_minus(Context *context, Value x) {
         }
     }
 
+    return val;
+}
+
+Value unary_not(Context *context, Value x) {
+    Value val = create_value(BOOL_TYPE);
+    val.as_int = !to_bool(context, x);
     return val;
 }
 

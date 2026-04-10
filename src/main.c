@@ -82,7 +82,11 @@ void print_error(ErrorKind err) {
         } break;
 
         case ERROR_CLOSED_STDIN: {
-            printf("Stdin is closed.\n");
+            printf("Stdin closed.\n");
+        } break;
+
+        case ERROR_INDEX_OUT_OF_BOUNDS: {
+            printf("Index out of bounds.\n");
         } break;
             
         default: assert(0 && "UNREACHABLE");

@@ -15,12 +15,17 @@ typedef enum {
     TOKEN_SLASH,
     TOKEN_PERCENT,
     TOKEN_CARET,
+    
     TOKEN_GT,
     TOKEN_LT,
     TOKEN_GTEQ,
     TOKEN_LTEQ,
+    TOKEN_NOT,
     TOKEN_EQ,
+    TOKEN_NEQ,
+    
     TOKEN_ARROW,
+    TOKEN_ASIGN,
     
     TOKEN_INT,
     TOKEN_FLOAT,
@@ -45,6 +50,9 @@ typedef enum {
     TOKEN_ELLIPSIS,
     
     TOKEN_KW_FN,
+    TOKEN_KW_IF,
+    TOKEN_KW_ELIF,
+    TOKEN_KW_ELSE,
     TOKEN_KW_CONST,
     TOKEN_KW_LET,
     TOKEN_KW_TRUE,

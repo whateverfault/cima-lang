@@ -108,5 +108,6 @@ typedef struct Array {
 
 void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array *va_args);
 void to_str(String_Builder *sb, Context *context, Value val);
+bool to_bool(Context *context, Value val);
 
 #endif //TYPE_H
