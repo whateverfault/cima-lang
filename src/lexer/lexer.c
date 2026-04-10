@@ -282,36 +282,32 @@ Token get_lit_token(Lexer *l) {
     
     else {
         tok = lexer_get_name(l);
-        
-        if (sv_cmp_cstr(&tok.val, "fn")) {
-            tok.kind = TOKEN_KW_FN;
-        }
-
-        if (sv_cmp_cstr(&tok.val, "if")) {
-            tok.kind = TOKEN_KW_IF;
-        }
-
-        if (sv_cmp_cstr(&tok.val, "elif")) {
-            tok.kind = TOKEN_KW_ELIF;
-        }
-
-        if (sv_cmp_cstr(&tok.val, "else")) {
-            tok.kind = TOKEN_KW_ELSE;
-        }
 
         if (sv_cmp_cstr(&tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
-
-        if (sv_cmp_cstr(&tok.val, "let")) {
+        else if (sv_cmp_cstr(&tok.val, "fn")) {
+            tok.kind = TOKEN_KW_FN;
+        }
+        else if (sv_cmp_cstr(&tok.val, "let")) {
             tok.kind = TOKEN_KW_LET;
         }
-        
-        if (sv_cmp_cstr(&tok.val, "true")) {
+        else if (sv_cmp_cstr(&tok.val, "for")) {
+            tok.kind = TOKEN_KW_FOR;
+        }
+        else if (sv_cmp_cstr(&tok.val, "if")) {
+            tok.kind = TOKEN_KW_IF;
+        }
+        else if (sv_cmp_cstr(&tok.val, "elif")) {
+            tok.kind = TOKEN_KW_ELIF;
+        }
+        else if (sv_cmp_cstr(&tok.val, "else")) {
+            tok.kind = TOKEN_KW_ELSE;
+        }
+        else if (sv_cmp_cstr(&tok.val, "true")) {
             tok.kind = TOKEN_KW_TRUE;
         }
-
-        if (sv_cmp_cstr(&tok.val, "false")) {
+        else if (sv_cmp_cstr(&tok.val, "false")) {
             tok.kind = TOKEN_KW_FALSE;
         }
     }

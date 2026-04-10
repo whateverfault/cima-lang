@@ -1,17 +1,14 @@
 println("Enter either 'yes' or 'no'")
 let x = readln()
 
-let a = if x == "yes" {
-    println("You entered 'yes'")
-    (69)
+let res = if x == "yes" {
+    "You entered 'yes'"
 }
 elif x == "no" {
-    println("You entered 'no'")
-    (67)
+    "You entered 'no'"
 }
 else {
-    println("You entered something else")
-    (-1)
+    "You entered something else"
 }
 
-println("{a}")
+println(res)

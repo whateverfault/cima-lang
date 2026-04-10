@@ -31,6 +31,10 @@ void args_free(Args args) {
 }
 
 void ast_free(AST_Node *root) {
+    if (root == NULL) {
+        return;
+    }
+    
     switch (root->kind) {
         case AST_BINOP: {
             AST_NodeBinOp *binop = (void*)root;
@@ -49,7 +53,7 @@ void ast_free(AST_Node *root) {
         } break;
 
         case AST_LET: {
-            AST_NodeLet *let_node = (void*)root;
+            AST_NodeLetStmt *let_node = (void*)root;
 
             if (let_node->has_initializer) {
                 ast_free(let_node->initializer);
@@ -152,8 +156,8 @@ AST_NodeIndex *alloc_index_expr(AST_Node *node, AST_Node *index) {
     return tok;
 }
 
-AST_NodeFunc *alloc_func_stmt(String_View name, Patterns args, AST_Node *body, ValueType *ret_type, bool constant) {
-    AST_NodeFunc *tok = (AST_NodeFunc*)malloc(sizeof(AST_NodeFunc));
+AST_NodeFnStmt *alloc_fn_stmt(String_View name, Patterns args, AST_Node *body, ValueType *ret_type, bool constant) {
+    AST_NodeFnStmt *tok = (AST_NodeFnStmt*)malloc(sizeof(AST_NodeFnStmt));
     assert(tok != NULL && "Memory allocation failed");
 
     tok->kind = AST_FN;
@@ -166,8 +170,8 @@ AST_NodeFunc *alloc_func_stmt(String_View name, Patterns args, AST_Node *body, V
     return tok;
 }
 
-AST_NodeLet *alloc_let_stmt(String_View name, ValueType *type, AST_Node *initializer, bool has_initializer, bool constant) {
-    AST_NodeLet *tok = (AST_NodeLet*)malloc(sizeof(AST_NodeLet));
+AST_NodeLetStmt *alloc_let_stmt(String_View name, ValueType *type, AST_Node *initializer, bool has_initializer, bool constant) {
+    AST_NodeLetStmt *tok = (AST_NodeLetStmt*)malloc(sizeof(AST_NodeLetStmt));
     assert(tok != NULL && "Memory allocation failed");
 
     tok->kind = AST_LET;
@@ -176,6 +180,19 @@ AST_NodeLet *alloc_let_stmt(String_View name, ValueType *type, AST_Node *initial
     tok->initializer = initializer;
     tok->has_initializer = has_initializer;
     tok->constant = constant;
+    
+    return tok;
+}
+
+AST_NodeForStmt *alloc_for_stmt(AST_Node *initializer, AST_Node *condition, AST_Node *next, AST_Node *body) {
+    AST_NodeForStmt *tok = (AST_NodeForStmt*)malloc(sizeof(AST_NodeForStmt));
+    assert(tok != NULL && "Memory allocation failed");
+
+    tok->kind = AST_FOR;
+    tok->initializer = initializer;
+    tok->condition = condition;
+    tok->next = next;
+    tok->body = body;
     
     return tok;
 }
@@ -284,6 +301,12 @@ UnaryOp get_unop(Token tok) {
     assert(0 && "UNREACHABLE");
 }
 
+bool is_stmt(AST_Node *node) {
+    return node->kind == AST_FN
+        || node->kind == AST_LET
+        || node->kind == AST_FOR;
+}
+
 Precedence get_precedence(Token tok) {
     Precedence prec = {0};
 
@@ -326,6 +349,8 @@ Precedence get_precedence(Token tok) {
                 prec.val = 3;
                 prec.right_associative = false;
             } break;
+                
+            default: break;
         }
     }
 
@@ -522,7 +547,7 @@ AST_Node *parse_block_expr(Lexer *l) {
             ret_expr = NULL;
         }
         
-        if (!skip(l, TOKEN_SEMICOLON) && node->kind != AST_FN) {
+        if (!skip(l, TOKEN_SEMICOLON) && !is_stmt(node)) {
             ret_expr = node;
             continue;
         }
@@ -606,6 +631,67 @@ AST_Node *parse_if_expr(Lexer *l) {
     }
         
     return (void*)alloc_branch_expr(condition, body, elif_branches, else_branch);
+}
+
+AST_Node *parse_for_stmt(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_FOR);
+
+    lexer_next(l);
+
+    AST_Node *initializer = NULL;
+    if (l->cur.kind != TOKEN_SEMICOLON) {
+        initializer = parse(l);
+    }
+
+    if (initializer != NULL && initializer->kind == AST_ERROR) {
+        return initializer;
+    }
+    
+    if (l->cur.kind != TOKEN_SEMICOLON) {
+        ast_free(initializer);
+        return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
+    }
+
+    lexer_next(l);
+    
+    AST_Node *condition = NULL;
+    if (l->cur.kind != TOKEN_SEMICOLON) {
+        condition = parse(l);
+    }
+
+    if (condition != NULL && condition->kind == AST_ERROR) {
+        ast_free(initializer);
+        return condition;
+    }
+    
+    if (l->cur.kind != TOKEN_SEMICOLON) {
+        ast_free(initializer);
+        ast_free(condition);
+        return (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
+    }
+
+    lexer_next(l);
+
+    AST_Node *next = NULL;
+    if (l->cur.kind != TOKEN_LBRACK) {
+        next = parse(l);
+    }
+
+    if (next != NULL && next->kind == AST_ERROR) {
+        ast_free(initializer);
+        ast_free(condition);
+        return next;
+    }
+
+    AST_Node *body = parse_block_expr(l);
+    if (body->kind == AST_ERROR) {
+        ast_free(initializer);
+        ast_free(condition);
+        ast_free(next);
+        return body;
+    }
+    
+    return (void*)alloc_for_stmt(initializer, condition, next, body);
 }
 
 AST_Node *parse_prim_expr(Lexer *l) {
@@ -949,7 +1035,7 @@ ErrorKind parse_patterns(Lexer *l, Patterns *args) {
     return ERROR_NONE;
 }
 
-AST_Node *parse_func_stmt(Lexer *l, bool constant) {
+AST_Node *parse_fn_item(Lexer *l, bool constant) {
     assert(l->cur.kind == TOKEN_KW_FN);
 
     lexer_next(l);
@@ -997,7 +1083,7 @@ AST_Node *parse_func_stmt(Lexer *l, bool constant) {
         return body;
     }
 
-    AST_Node *func = (void*)alloc_func_stmt(name, args, body, ret_type, constant);
+    AST_Node *func = (void*)alloc_fn_stmt(name, args, body, ret_type, constant);
     return func;
 }
 
@@ -1026,7 +1112,7 @@ AST_Node *parse_let_stmt(Lexer *l, bool constant) {
     }
     
     if (l->cur.kind != TOKEN_ASIGN) {
-        AST_NodeLet *let_node = alloc_let_stmt(name, type, NULL, false, constant);
+        AST_NodeLetStmt *let_node = alloc_let_stmt(name, type, NULL, false, constant);
         return (void*)let_node;
     }
     
@@ -1039,11 +1125,11 @@ AST_Node *parse_let_stmt(Lexer *l, bool constant) {
         return (void*)alloc_error(err);
     }
 
-    AST_NodeLet *let_node = alloc_let_stmt(name, type, initializer, true, constant);
+    AST_NodeLetStmt *let_node = alloc_let_stmt(name, type, initializer, true, constant);
     return (void*)let_node;
 }
 
-AST_Node *parse_const(Lexer *l) {
+AST_Node *parse_const_item(Lexer *l) {
     assert(l->cur.kind == TOKEN_KW_CONST);
     lexer_next(l);
 
@@ -1051,9 +1137,28 @@ AST_Node *parse_const(Lexer *l) {
     
     switch (l->cur.kind) {
         case TOKEN_KW_FN: {
-            node = parse_func_stmt(l, true);
+            node = parse_fn_item(l, true);
         } break;
 
+        case TOKEN_NAME: {
+            node = parse_let_stmt(l, true);
+        } break;
+            
+        default: {
+            node = (void*)alloc_error(ERROR_UNEXPECTED_TOKEN);
+        } break;
+    }
+
+    return node;
+}
+
+AST_Node *parse_const_stmt(Lexer *l) {
+    assert(l->cur.kind == TOKEN_KW_CONST);
+    lexer_next(l);
+
+    AST_Node *node = NULL;
+    
+    switch (l->cur.kind) {
         case TOKEN_NAME: {
             node = parse_let_stmt(l, true);
         } break;
@@ -1070,16 +1175,16 @@ AST_Node *parse_stmt(Lexer *l) {
     AST_Node *node = NULL;
     
     switch (l->cur.kind) {
-        case TOKEN_KW_FN: {
-            node = parse_func_stmt(l, false);
-        } break;
-
         case TOKEN_KW_LET: {
             node = parse_let_stmt(l, false);
         } break;
+
+        case TOKEN_KW_FOR: {
+            node = parse_for_stmt(l);
+        } break;
             
         case TOKEN_KW_CONST: {
-            node = parse_const(l);
+            node = parse_const_stmt(l);
         } break;
             
         default: {
@@ -1096,7 +1201,7 @@ AST_Node *parse(Lexer *l) {
     switch (l->cur.kind) {
         case TOKEN_KW_LET:
         case TOKEN_KW_CONST:
-        case TOKEN_KW_FN: {
+        case TOKEN_KW_FOR: {
             node = parse_stmt(l);
         } break;
             
@@ -1110,8 +1215,21 @@ AST_Node *parse(Lexer *l) {
 
 AST_Node *parse_item(Lexer *l) {
     AST_Node *node = NULL;
+
+    switch (l->cur.kind) {
+        case TOKEN_KW_FN: {
+            node = parse_fn_item(l, false);
+        } break;
+
+        case TOKEN_KW_CONST: {
+            node = parse_const_item(l);
+        } break;
+
+        default: {
+            node = parse(l);
+        }
+    }
     
-    node = parse(l);
     skip(l, TOKEN_SEMICOLON);
     
     return node;

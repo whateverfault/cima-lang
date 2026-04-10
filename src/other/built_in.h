@@ -58,6 +58,7 @@ static Var builtin_vars[] = {
 static String_Builder msg_sb = CSTR_TO_SB("msg");
 static String_Builder args_sb = CSTR_TO_SB("args");
 static String_Builder string_sb = CSTR_TO_SB("string");
+static String_Builder arr_sb = CSTR_TO_SB("arr");
 
 static Pattern print_pattern[] = {
     (Pattern){
@@ -77,6 +78,13 @@ static Pattern str_pattern[] = {
     },
 };
 
+static Pattern len_pattern[] = {
+    (Pattern){
+        .name = &arr_sb,
+        .type = ARRAY_ANY_TYPE,
+    },
+};
+
 static Pattern empty_pattern[] = {0};
 
 static const Patterns format_patterns = (Patterns){
@@ -87,6 +95,12 @@ static const Patterns format_patterns = (Patterns){
 
 static const Patterns str_patterns = (Patterns){
     .items = str_pattern,
+    .count = 1,
+    .capacity = 1,
+};
+
+static const Patterns len_patterns = (Patterns){
+    .items = len_pattern,
     .count = 1,
     .capacity = 1,
 };
@@ -105,6 +119,7 @@ static String_Builder readln_sb = CSTR_TO_SB("readln");
 static String_Builder trim_sb = CSTR_TO_SB("trim");
 static String_Builder trim_left_sb = CSTR_TO_SB("trim_left");
 static String_Builder trim_right_sb = CSTR_TO_SB("trim_right");
+static String_Builder len_sb = CSTR_TO_SB("len");
 
 static FuncBuiltIn builtin_funcs[] = {
     (FuncBuiltIn){
@@ -153,6 +168,12 @@ static FuncBuiltIn builtin_funcs[] = {
         .name = &trim_right_sb,
         .func = trim_right_func,
         .args = str_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .name = &len_sb,
+        .func = arr_len_func,
+        .args = len_patterns,
         .constant = true,
     },
 };

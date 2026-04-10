@@ -40,4 +40,6 @@ Value trim_func(Context *context, Context *fn_context);
 Value trim_left_func(Context *context, Context *fn_context);
 Value trim_right_func(Context *context, Context *fn_context);
 
+Value arr_len_func(Context *context, Context *fn_context);
+
 #endif //FUNCS_H

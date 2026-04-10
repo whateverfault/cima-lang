@@ -140,7 +140,7 @@ void register_func(Context *context, AST_Node *node) {
         return;
     }
     
-    AST_NodeFunc *func_node = (AST_NodeFunc*)node;
+    AST_NodeFnStmt *func_node = (AST_NodeFnStmt*)node;
     
     String_Builder *sb = sb_alloc();
     sv_to_sb(&func_node->name, sb);
@@ -159,7 +159,7 @@ void register_var(Context *context, AST_Node *node) {
         return;
     }
     
-    AST_NodeLet *let_node = (void*)node;
+    AST_NodeLetStmt *let_node = (void*)node;
 
     Value val = create_value(let_node->type);
     if (let_node->has_initializer) {
@@ -181,6 +181,43 @@ void register_var(Context *context, AST_Node *node) {
 
     var->val = val;
     var->constant = let_node->constant;
+}
+
+void execute_for_loop(Context *context, AST_Node *node) {
+    assert(node->kind == AST_FOR);
+
+    AST_NodeForStmt *for_node = (void*)node;
+
+    execute(context, for_node->initializer);
+    if (has_errors(context)) {
+        return;
+    }
+
+    while (true) {
+        Value condition = execute(context, for_node->condition);
+        if (has_errors(context)) {
+            return;
+        }
+
+        bool condition_value = to_bool(context, condition);
+        if (has_errors(context)) {
+            return;
+        }
+        
+        if (!condition_value) {
+            break;
+        }
+
+        execute(context, for_node->body);
+        if (has_errors(context)) {
+            return;
+        }
+        
+        execute(context, for_node->next);
+        if (has_errors(context)) {
+            return;
+        }
+    }
 }
 
 Value execute_binop(Context *context, AST_Node *root) {
@@ -565,6 +602,11 @@ Value execute(Context *context, AST_Node *node) {
         case AST_LET: {
             register_var(context, node);
         } break;
+
+        case AST_FOR: {
+            execute_for_loop(context, node);
+        } break;
+
 
         default: {
             value = execute_expr(context, node);

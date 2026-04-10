@@ -251,3 +251,18 @@ Value trim_left_func(Context *context, Context *fn_context) {
 Value trim_right_func(Context *context, Context *fn_context) {
     return trim(context, fn_context, sb_trim_right);
 }
+
+Value arr_len_func(Context *context, Context *fn_context) {
+    Value ret = create_value(INT_TYPE);
+    
+    Var *arr;
+    if (!resolve_name_cstr(fn_context, "arr", &arr)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Array *arr_val = arr->val.as_ptr;
+    ret.as_int = arr_val->els.count;
+
+    return ret;
+}

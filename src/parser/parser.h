@@ -42,6 +42,7 @@ typedef enum {
     AST_INDEX,
     AST_FN,
     AST_LET,
+    AST_FOR,
     AST_ARR,
     AST_BLOCK,
     AST_IF,
@@ -160,7 +161,7 @@ typedef struct {
     AST_Node *body;
     ValueType *ret_type;
     bool constant;
-} AST_NodeFunc;
+} AST_NodeFnStmt;
 
 typedef struct {
     AST_FIELDS
@@ -169,7 +170,15 @@ typedef struct {
     AST_Node *initializer;
     bool has_initializer;
     bool constant;
-} AST_NodeLet;
+} AST_NodeLetStmt;
+
+typedef struct {
+    AST_FIELDS
+    AST_Node *initializer;
+    AST_Node *condition;
+    AST_Node *next;
+    AST_Node *body;
+} AST_NodeForStmt;
 
 typedef struct {
     AST_FIELDS
