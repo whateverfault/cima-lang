@@ -9,7 +9,8 @@ add_executable(ast_calc
         src/parser/parser.c
         src/executor/funcs.c
         src/types/type.c
-        src/executor/executor.c)
+        src/executor/executor.c
+        src/other/sys/sys.c)
 
 target_include_directories(ast_calc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src

@@ -3,6 +3,18 @@
 
 #include <stdbool.h>
 
+typedef enum Signal {
+    SIGNAL_NONE,
+    SIGNAL_CONTINUE,
+    SIGNAL_BREAK,
+    SIGNAL_RETURN,
+} Signal;
+
+typedef struct EvalResult {
+    Signal sig;
+    Value val;
+} EvalResult;
+
 typedef struct {
     ErrorKind *items;
     size_t count;
@@ -39,6 +51,9 @@ void context_free(Context *context);
 
 bool has_errors(Context *context);
 void append_error(Context *context, ErrorKind err);
+ErrorKind get_signal_error(Signal sig);
+
+EvalResult create_result(ValueType *type);
 
 Array *alloc_arr(ValueType *el_type);
 
@@ -48,9 +63,9 @@ bool get_func(Context *context, String_View *name_sv, Func **func);
 
 Value execute_arr_expr(Context *context, AST_Node *node);
 Value execute_call_expr(Context *context, AST_Node *node);
-Value execute_expr(Context *context, AST_Node *expr);
-void execute_nodes(Context *context, Nodes *nodes);
-Value execute(Context *context, AST_Node *node);
+EvalResult execute_expr(Context *context, AST_Node *expr);
+EvalResult execute_nodes(Context *context, Nodes *nodes);
+EvalResult execute(Context *context, AST_Node *node);
 void execute_program(Context *context, AST_NodeProgram *program);
 
 #endif //EXECUTOR_H

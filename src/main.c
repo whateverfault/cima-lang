@@ -33,6 +33,22 @@ void print_error(ErrorKind err) {
             printf("Unexpected token.\n");
         } break;
 
+        case ERROR_UNEXPECTED_EOF: {
+            printf("Unexpected end of file.\n");
+        } break;
+
+        case ERROR_UNEXPECTED_CONTINUE: {
+            printf("Unexpected continue signal.\n");
+        } break;
+
+        case ERROR_UNEXPECTED_BREAK: {
+            printf("Unexpected break signal.\n");
+        } break;
+
+        case ERROR_UNEXPECTED_RETURN: {
+            printf("Unexpected return signal.\n");
+        } break;
+
         case ERROR_NOT_DEFINED: {
             printf("Identifier is not defined.\n");
         } break;
@@ -61,6 +77,10 @@ void print_error(ErrorKind err) {
             printf("Incompatible types.\n");
         } break;
 
+        case UNEXPECTED_TYPE: {
+            printf("Unexpected type.\n");
+        } break;
+
         case ERROR_UNEXPECTED_NAMED_ARG: {
             printf("Unexpected named argument.\n");
         } break;
@@ -80,13 +100,21 @@ void print_error(ErrorKind err) {
         case ERROR_ARGS_AFTER_VA_ARG: {
             printf("Unexpected argument after variadic.\n");
         } break;
-
+        
         case ERROR_CLOSED_STDIN: {
             printf("Stdin closed.\n");
         } break;
 
         case ERROR_INDEX_OUT_OF_BOUNDS: {
             printf("Index out of bounds.\n");
+        } break;
+
+        case ERROR_CONTINUE_OUTSIDE_LOOP: {
+            printf("Continue signal outside a loop.\n");
+        } break;
+        
+        case ERROR_BREAK_OUTSIDE_LOOP: {
+            printf("Break signal outside a loop.\n");
         } break;
             
         default: assert(0 && "UNREACHABLE");
@@ -97,6 +125,7 @@ void usage(char **argv) {
     fprintf(stderr, "USAGE: %s <path>", argv[0]);
 }
 
+// TODO: Implement support of 06.cima features
 int main(int argc, char **argv) {
     String_Builder source_sb = {0};
 

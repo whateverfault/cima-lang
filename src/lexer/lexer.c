@@ -18,6 +18,10 @@ bool is_binop(Token tok) {
         case TOKEN_PERCENT:
         case TOKEN_CARET:
         case TOKEN_ASIGN:
+        case TOKEN_ANDAND:
+        case TOKEN_AND:
+        case TOKEN_OROR:
+        case TOKEN_OR:
         case TOKEN_GT:
         case TOKEN_LT:
         case TOKEN_GTEQ:
@@ -33,6 +37,8 @@ bool is_binop(Token tok) {
 
 bool is_unop(Token tok) {
     switch (tok.kind) {
+        case TOKEN_PLUSPLUS:
+        case TOKEN_MINUSMINUS:
         case TOKEN_NOT:
         case TOKEN_PLUS:
         case TOKEN_MINUS:{
@@ -170,14 +176,26 @@ Token lexer_get_number(Lexer *l) {
             .count = 0,
         },
     };
-    
-    while (INBOUNDS(l) && (isdigit(CURRENT(l)) || CURRENT(l) == '.')) {
-        if (CURRENT(l) == '.') {
-            tok.kind = TOKEN_FLOAT;
+
+    char last = '\0';
+    while (INBOUNDS(l) && (isdigit(CURRENT(l)) || CURRENT(l) == '.' || CURRENT(l) == 'e' || CURRENT(l) == 'E' || CURRENT(l) == '-' || CURRENT(l) == '+')) {
+        if ((CURRENT(l) == '-' || CURRENT(l) == '+') && (last != 'e' && last != 'E')) {
+            break;
         }
 
+        last = CURRENT(l);
+        
+        if (CURRENT(l) == '.' || CURRENT(l) == 'e' || CURRENT(l) == '-' || CURRENT(l) == '+') {
+            tok.kind = TOKEN_FLOAT;
+        }
+        
         ++tok.val.count;
         ++l->pos;
+    }
+
+    while (tok.val.count > 0 && (tok.val.items[tok.val.count - 1] == '-' || tok.val.items[tok.val.count - 1] == '+')) {
+        --tok.val.count;
+        --l->pos;
     }
     
     return tok;
@@ -258,6 +276,8 @@ Token lexer_get_name(Lexer *l) {
     
     while (INBOUNDS(l)
         && !isblank(CURRENT(l))
+        && !iscntrl(CURRENT(l))
+        && !isspace(CURRENT(l))
         && !is_special_symb(CURRENT(l))
         && !is_binop_symb(CURRENT(l))) {
         ++tok.val.count;
@@ -282,15 +302,18 @@ Token get_lit_token(Lexer *l) {
     
     else {
         tok = lexer_get_name(l);
-
-        if (sv_cmp_cstr(&tok.val, "const")) {
-            tok.kind = TOKEN_KW_CONST;
-        }
-        else if (sv_cmp_cstr(&tok.val, "fn")) {
-            tok.kind = TOKEN_KW_FN;
+    
+        if (sv_cmp_cstr(&tok.val, "func")) {
+            tok.kind = TOKEN_KW_FUNC;
         }
         else if (sv_cmp_cstr(&tok.val, "let")) {
             tok.kind = TOKEN_KW_LET;
+        }
+        else if (sv_cmp_cstr(&tok.val, "struct")) {
+            tok.kind = TOKEN_KW_STRUCT;
+        }
+        else if (sv_cmp_cstr(&tok.val, "const")) {
+            tok.kind = TOKEN_KW_CONST;
         }
         else if (sv_cmp_cstr(&tok.val, "for")) {
             tok.kind = TOKEN_KW_FOR;
@@ -310,11 +333,26 @@ Token get_lit_token(Lexer *l) {
         else if (sv_cmp_cstr(&tok.val, "else")) {
             tok.kind = TOKEN_KW_ELSE;
         }
+        else if (sv_cmp_cstr(&tok.val, "continue")) {
+            tok.kind = TOKEN_KW_CONTINUE;
+        }
+        else if (sv_cmp_cstr(&tok.val, "break")) {
+            tok.kind = TOKEN_KW_BREAK;
+        }
+        else if (sv_cmp_cstr(&tok.val, "return")) {
+            tok.kind = TOKEN_KW_RETURN;
+        }
         else if (sv_cmp_cstr(&tok.val, "true")) {
             tok.kind = TOKEN_KW_TRUE;
         }
         else if (sv_cmp_cstr(&tok.val, "false")) {
             tok.kind = TOKEN_KW_FALSE;
+        }
+        else if (sv_cmp_cstr(&tok.val, "and")) {
+            tok.kind = TOKEN_ANDAND;
+        }
+        else if (sv_cmp_cstr(&tok.val, "or")) {
+            tok.kind = TOKEN_OROR;
         }
     }
     
@@ -331,14 +369,6 @@ Token get_token(Lexer *l) {
     };
     
 switch (CURRENT(l)) {
-        case '+': {
-            tok.kind = TOKEN_PLUS;
-        } break;
-
-        case '-': {
-            tok.kind = TOKEN_MINUS;
-        } break;
-
         case '*': {
             tok.kind = TOKEN_STAR;
         } break;
@@ -507,6 +537,82 @@ Token get_dot_token(Lexer *l) {
     return tok;
 }
 
+Token get_plus_token(Lexer *l) {
+    Token tok = {
+        .kind = TOKEN_PLUS,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
+    
+    ++l->pos;
+    if (INBOUNDS(l) && CURRENT(l) == '+') {
+        tok.kind = TOKEN_PLUSPLUS;
+        ++tok.val.count;
+        ++l->pos;
+    }
+    
+    return tok;
+}
+
+Token get_minus_token(Lexer *l) {
+    Token tok = {
+        .kind = TOKEN_MINUS,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
+    
+    ++l->pos;
+    if (INBOUNDS(l) && CURRENT(l) == '-') {
+        tok.kind = TOKEN_MINUSMINUS;
+        ++tok.val.count;
+        ++l->pos;
+    }
+    
+    return tok;
+}
+
+Token get_and_token(Lexer *l) {
+    Token tok = {
+        .kind = TOKEN_AND,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
+    
+    ++l->pos;
+    if (INBOUNDS(l) && CURRENT(l) == '&') {
+        tok.kind = TOKEN_ANDAND;
+        ++tok.val.count;
+        ++l->pos;
+    }
+    
+    return tok;
+}
+
+Token get_or_token(Lexer *l) {
+    Token tok = {
+        .kind = TOKEN_OR,
+        .val = (String_View){
+            .items = l->source.items + l->pos,
+            .count = 1,
+        },
+    };
+    
+    ++l->pos;
+    if (INBOUNDS(l) && CURRENT(l) == '|') {
+        tok.kind = TOKEN_OROR;
+        ++tok.val.count;
+        ++l->pos;
+    }
+    
+    return tok;
+}
+
 void skip_multi_line_comment(Lexer *l) {
     ++l->pos;
 
@@ -554,6 +660,14 @@ Token lexer_next(Lexer *l) {
     Token tok;
     
     switch (CURRENT(l)) {
+        case '+': {
+            tok = get_plus_token(l);
+        } break;
+
+        case '-': {
+            tok = get_minus_token(l);
+        } break;
+        
         case '=': {
             tok = get_eq_token(l);
         } break;
@@ -572,6 +686,14 @@ Token lexer_next(Lexer *l) {
 
         case '!': {
             tok = get_not_token(l);
+        } break;
+
+        case '&': {
+            tok = get_and_token(l);
+        } break;
+
+        case '|': {
+            tok = get_or_token(l);
         } break;
 
         case '#': {

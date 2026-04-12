@@ -3,6 +3,7 @@
 #include "funcs.h"
 #include "nothing/nothing.h" 
 #include "other/built_in.h"
+#include "other/sys/sys.h"
 
 #define HAS_VARIADIC(func) ((func)->args.count > 0 && (func)->args.items[(func)->args.count - 1].type->tag == TYPE_VARIADIC)
 
@@ -42,7 +43,8 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped) {
     for (size_t i = 0; i < args.count; ++i) {
         Arg arg = args.items[i];
         
-        Value value = execute(context, arg.node);
+        EvalResult result = execute_expr(context, arg.node);
+        append_error(context, get_signal_error(result.sig));
         if (has_errors(context)) {
             free(func_args);
             return;
@@ -50,15 +52,15 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped) {
 
         if (i >= func->args.count - HAS_VARIADIC(func)) {
             Array *va_args_arr = va_args.as_ptr;
-            if (value.type->tag == TYPE_ARRAY) {
-                Array *arr = value.as_ptr;
+            if (result.val.type->tag == TYPE_ARRAY) {
+                Array *arr = result.val.as_ptr;
                 if (arr->el_type->tag == TYPE_VARIADIC) {
                     da_append_many(&va_args_arr->els, &arr->els);
                     continue;
                 }
             }
             
-            da_append(&va_args_arr->els, value);
+            da_append(&va_args_arr->els, result.val);
             continue;
         }
         
@@ -78,7 +80,7 @@ void unwrap_args(Context *context, Func *func, Args args, Var **unwrapped) {
         }
         
         func_args[i].name = name_sb;
-        func_args[i].val = value;
+        func_args[i].val = result.val;
         func_args[i].constant = false;
     }
 
@@ -96,23 +98,23 @@ static size_t recursion_depth = 0;
 static const size_t max_recursion_depth = 1024;
 
 Value exec_func(Context *context, Func *func, Args args) {
-    Value value = create_value(VOID_TYPE);
+    EvalResult result = create_result(VOID_TYPE);
     
     if (recursion_depth >= max_recursion_depth) {
         append_error(context, ERROR_RECURSION_LIMIT_EXCEEDED);
-        return value;
+        return result.val;
     }
     
     check_args(context, func, args);
     if (has_errors(context)) {
-        return value;
+        return result.val;
     }
 
     Var *unwrapped = NULL;
     
     unwrap_args(context, func, args, &unwrapped);
     if (has_errors(context)) {
-        return value;
+        return result.val;
     }
     
     HashMap *local_vars = hm_copy(context->global->scope.vars);
@@ -136,13 +138,15 @@ Value exec_func(Context *context, Func *func, Args args) {
     switch (func->kind) {
         case FUNC_BUILT_IN: {
             FuncBuiltIn *built_in = (void*)func;
-            value = built_in->func(context, &local_context);
+            result.val = built_in->func(context, &local_context);
         } break;
 
         case FUNC_CUSTOM: {
             FuncCustom *custom = (void*)func;
             
-            value = execute(&local_context, custom->body);
+            result = execute(&local_context, custom->body);
+            append_error(context, get_signal_error(result.sig));
+            
             hm_free(local_vars);
             hm_free(local_funcs);
         } break;
@@ -151,7 +155,7 @@ Value exec_func(Context *context, Func *func, Args args) {
     --recursion_depth;
     
     free(unwrapped);
-    return value;
+    return result.val;
 }
 
 Value println_func(Context *context, Context *fn_context) {
@@ -174,6 +178,7 @@ Value print_func(Context *context, Context *fn_context) {
 
     sb_pprint((String_Builder*)formated.as_ptr);
     da_pfree((String_Builder*)formated.as_ptr);
+    free(formated.as_ptr);
     return ret;
 }
 
@@ -204,19 +209,74 @@ Value format_func(Context *context, Context *fn_context) {
 
 Value read_func(Context *context, Context *fn_context) {
     Value ret = create_value(CHAR_TYPE);
-    scanf("%c", &ret.as_int);
+
+    Var *intercept;
+    if (!resolve_name_cstr(fn_context, "intercept", &intercept)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    if (intercept->val.as_int) {
+        set_echo_enabled(false);
+    }
+
+    int c = getchar();
+
+    if (intercept->val.as_int) {
+        set_echo_enabled(true);
+    }
+
+    if (c == EOF) {
+        append_error(context, ERROR_CLOSED_STDIN);
+        ret.as_int = 0;
+        return ret;
+    }
+
+    ret.as_int = (char)c;
     return ret;
 }
 
 Value readln_func(Context *context, Context *fn_context) {
     Value ret = create_value(STR_TYPE);
-    
     ret.as_ptr = sb_alloc();
-    
+
+    Var *intercept;
+    if (!resolve_name_cstr(fn_context, "intercept", &intercept)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    if (intercept->val.as_int) {
+        set_echo_enabled(false);
+    }
+
     if (!sb_getline(ret.as_ptr, stdin)) {
         append_error(context, ERROR_CLOSED_STDIN);
+
+        if (intercept->val.as_int) {
+            set_echo_enabled(true);
+        }
+
+        return ret;
     }
-    
+
+    if (intercept->val.as_int) {
+        set_echo_enabled(true);
+    }
+
+    return ret;
+}
+
+Value read_key_func(Context *context, Context *fn_context) {
+    Value ret = create_value(CHAR_TYPE);
+    ret.as_int = read_key();
+    return ret;
+}
+
+Value clear_func(Context *context, Context *fn_context) {
+    Value ret = create_value(VOID_TYPE);
+    printf("\033[2J\033[H");
+    fflush(stdout);
     return ret;
 }
 
@@ -260,9 +320,79 @@ Value arr_len_func(Context *context, Context *fn_context) {
         append_error(context, ERROR_NOT_DEFINED);
         return ret;
     }
-
+    
     Array *arr_val = arr->val.as_ptr;
     ret.as_int = arr_val->els.count;
 
+    return ret;
+}
+
+Value randint_func(Context *context, Context *fn_context) {
+    Value ret = create_value(INT_TYPE);
+    
+    Var *min;
+    if (!resolve_name_cstr(fn_context, "min", &min)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Var *max;
+    if (!resolve_name_cstr(fn_context, "max", &max)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    init_rng();
+    ret.as_int = min->val.as_int + rand() % (max->val.as_int - min->val.as_int + 1);
+    return ret;
+}
+
+Value append_func(Context *context, Context *fn_context) {
+    Value ret = create_value(VOID_TYPE);
+
+    Var *arr_arg;
+    if (!resolve_name_cstr(fn_context, "arr", &arr_arg)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Var *va_args_arg;
+    if (!resolve_name_cstr(fn_context, "elements", &va_args_arg)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Array *arr = arr_arg->val.as_ptr;
+    Array *va_args = va_args_arg->val.as_ptr;
+
+    da_append_many(&arr->els, &va_args->els);
+    return ret;
+}
+
+Value remove_at_func(Context *context, Context *fn_context) {
+    Value ret = create_value(ANY_TYPE);
+
+    Var *arr_arg;
+    if (!resolve_name_cstr(fn_context, "arr", &arr_arg)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Var *index_arg;
+    if (!resolve_name_cstr(fn_context, "index", &index_arg)) {
+        append_error(context, ERROR_NOT_DEFINED);
+        return ret;
+    }
+
+    Array *arr = arr_arg->val.as_ptr;
+    INT_CTYPE index = index_arg->val.as_int;
+
+    if (index < 0 || index >= arr->els.count) {
+        append_error(context, ERROR_INDEX_OUT_OF_BOUNDS);
+        return ret;
+    }
+
+    ret = arr->els.items[index];
+    da_remove(&arr->els, index);
     return ret;
 }

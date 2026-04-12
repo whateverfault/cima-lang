@@ -482,6 +482,96 @@ Value binary_pow(Context *context, Value lhs, Value rhs) {
     }
 }
 
+Value binary_logic_and(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+    
+    bool lhs_val = to_bool(context, lhs);
+    if (has_errors(context)) {
+        return val;
+    }
+
+    bool rhs_val = to_bool(context, rhs);
+    if (has_errors(context)) {
+        return val;
+    }
+
+    val.as_int = lhs_val && rhs_val;
+    return val;
+}
+
+Value binary_bitwise_and(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(VOID_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+
+    switch (lhs_type->tag) {
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT: {
+                    val.as_int = val.as_int = lhs.as_int & rhs.as_int;
+                    val.type = INT_TYPE;
+                }
+                
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+        
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
+Value binary_logic_or(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(BOOL_TYPE);
+    
+    bool lhs_val = to_bool(context, lhs);
+    if (has_errors(context)) {
+        return val;
+    }
+
+    bool rhs_val = to_bool(context, rhs);
+    if (has_errors(context)) {
+        return val;
+    }
+
+    val.as_int = lhs_val || rhs_val;
+    return val;
+}
+
+Value binary_bitwise_or(Context *context, Value lhs, Value rhs) {
+    Value val = create_value(VOID_TYPE);
+
+    ValueType *lhs_type = (void*)lhs.type;
+    ValueType *rhs_type = (void*)rhs.type;
+
+    switch (lhs_type->tag) {
+        case TYPE_INT: {
+            switch (rhs_type->tag) {
+                case TYPE_INT: {
+                    val.as_int = val.as_int = lhs.as_int | rhs.as_int;
+                    val.type = INT_TYPE;
+                }
+                
+                default: {
+                    append_error(context, ERROR_INCOMPATIBLE_TYPES);
+                    return val;
+                }
+            }
+        }
+        
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+            return val;
+        }
+    }
+}
+
 Value binary_gt(Context *context, Value lhs, Value rhs) {
     Value val = create_value(BOOL_TYPE);
 
@@ -860,6 +950,54 @@ Value unary_minus(Context *context, Value x) {
         }
     }
 
+    return val;
+}
+
+Value unary_increment(Context *context, Value x) {
+    Value val = create_value(VOID_TYPE);
+
+    switch (x.type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
+        case TYPE_INT: {
+            val.as_int = x.as_int + 1;
+            val.type = INT_TYPE;
+        } break;
+
+        case TYPE_FLOAT: {
+            val.as_float = x.as_float + 1;
+            val.type = FLOAT_TYPE;
+        } break;
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+        }
+    }
+    
+    return val;
+}
+
+Value unary_decrement(Context *context, Value x) {
+    Value val = create_value(VOID_TYPE);
+
+    switch (x.type->tag) {
+        case TYPE_CHAR:
+        case TYPE_BOOL:
+        case TYPE_INT: {
+            val.as_int = x.as_int - 1;
+            val.type = INT_TYPE;
+        } break;
+
+        case TYPE_FLOAT: {
+            val.as_float = x.as_float - 1;
+            val.type = FLOAT_TYPE;
+        } break;
+            
+        default: {
+            append_error(context, ERROR_INCOMPATIBLE_TYPES);
+        }
+    }
+    
     return val;
 }
 

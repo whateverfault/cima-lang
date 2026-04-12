@@ -1,0 +1,279 @@
+const field_size = 16
+
+const space = 0
+const body = 1
+const head = 2
+const apple = 3
+
+const head_symb = '@'
+const body_symb = '#'
+const space_symb = '.'
+const apple_symb = '%'
+
+let apple_spawned = false
+let apple_pos = []
+let snake = [[4, 4]]
+
+const status_win = 0
+const status_lose = 1
+let status = status_win
+
+const casual_difficulty = 0
+const normal_difficulty = 1
+
+let last_pos_x = snake[0][0]
+let last_pos_y = snake[0][1]
+
+menu_loop()
+
+println("Press any key to exit.")
+read_key()
+
+func menu_loop(){
+    forever {
+        let difficulty = casual_difficulty
+
+        println("What difficulty do you chose? (Casual\\Normal)")
+        
+        let choice = readln(false)
+        while choice != "Casual" and choice != "Normal" {
+            choice = readln(false)
+            
+            clear()
+            println("What difficulty do you chose? (Casual\\Normal)")
+        }
+    
+        clear()
+        
+        if choice == "Casual" {
+            difficulty = casual_difficulty
+        }
+        else {
+            difficulty = normal_difficulty
+        }
+    
+        game_loop(difficulty)
+        
+        if status == status_win {
+            clear()
+            println("Congratulations!!!")
+        }
+        elif status == status_lose {
+            clear()
+            println("Ooops... You lost.")
+        }
+        else {
+            println("\nERROR: Unexpected game status.");
+            return;
+        }
+        
+        println("Wanna try again? (Y\\n)")
+        let ans = read(false)
+        
+        ans = if ans == 'Y' or ans == 'y' {
+            'y'
+        }
+        elif ans == 'N' or ans == 'n' {
+            'n'
+        }
+        else {
+            'y'
+        }
+        
+        clear()
+        
+        if ans == 'y' {
+            apple_pos = []
+            snake = [[4, 4]]
+            status = status_win
+            apple_spawned = false
+            continue
+        }
+        else {
+            return
+        }
+    }
+}
+
+func game_loop(difficulty: int) {
+    forever {
+        if !apple_spawned {
+            spawn_apple()
+        }
+    
+        clear()
+        print_field()
+        
+        if false {
+            println("apple:\nx: {apple_pos[0]}, y: {apple_pos[1]}")
+            println("snake: {snake}")
+        }
+        
+        let key = ' '
+        
+        while key != 'w' and key != 'a' and key != 's' and key != 'd' {
+            key = read_key()
+        
+            if key == 'w' {
+                move_up(difficulty)
+            }
+            elif key == 'a' {
+                move_left(difficulty)
+            }
+            elif key == 's' {
+                move_down(difficulty)
+            }
+            elif key == 'd' {
+                move_right(difficulty)
+            }
+        }
+        
+        if snake[0][0] == apple_pos[0] and snake[0][1] == apple_pos[1] {
+            apple_spawned = false
+            remove_at(apple_pos, 1)
+            remove_at(apple_pos, 0)
+            
+            append(snake, [last_pos_x, last_pos_y])
+            continue
+        }
+        
+        for let i = 1; i < len(snake); ++i {
+            if snake[0][0] == snake[i][0] and snake[0][1] == snake[i][1] {
+                status = status_lose
+                return
+            }
+        }
+    }
+}
+
+func spawn_apple(){
+    let x = randint(0, field_size - 1)
+    let y = randint(0, field_size - 1)
+    
+    let cell = get_cell(x, y)
+    while cell == head or cell == body {
+        x = (x + 1) % field_size
+        y = (y + 1) % field_size
+        cell = get_cell(x, y)
+    }
+    
+    append(apple_pos, x, y)
+    apple_spawned = true
+}
+
+func print_field() {
+    for let y = 0; y < field_size; ++y {
+        for let x = 0; x < field_size; ++x {
+            let cell = get_cell(x, y)
+            
+            if cell == head {
+                print("{head_symb}")
+            }
+            elif cell == body {
+                print("{body_symb}")
+            }
+            elif cell == space {
+                print("{space_symb}")
+            }
+            elif cell == apple {
+                print("{apple_symb}")
+            }
+            else {
+                println("\nERROR: Wrong cell value. ({cell})")
+                return
+            }
+        }
+        print("\n")
+    }
+}
+
+func get_cell(x: int, y: int) : int {
+    for let i = 0; i < len(snake); ++i {
+        if x == snake[i][0] and y == snake[i][1] {
+            return if i == 0 {
+                head
+            }
+            else {
+                body
+            }
+        }
+    }
+    
+    if apple_spawned and x == apple_pos[0] and y == apple_pos[1] {
+        return apple
+    }
+    
+    return space
+}
+
+func get_index(x: int, y: int) : int {
+    return y * size + x
+}
+
+func move_up(difficulty: int) {
+    if snake[0][1] > 0 {
+        last_pos_x = snake[0][0]
+        last_pos_y = snake[0][1]
+
+        --snake[0][1]
+        move_body(difficulty)
+    }
+}
+
+func move_down(difficulty: int) {
+    if snake[0][1] < field_size - 1 {
+        last_pos_x = snake[0][0]
+        last_pos_y = snake[0][1]
+
+        ++snake[0][1]
+        move_body(difficulty)
+    }
+}
+
+func move_right(difficulty: int) {
+    if snake[0][0] < field_size - 1 {
+        last_pos_x = snake[0][0]
+        last_pos_y = snake[0][1]
+
+        ++snake[0][0]
+        move_body(difficulty)
+    }
+}
+
+func move_left(difficulty: int) {
+    if snake[0][0] > 0 {
+        last_pos_x = snake[0][0]
+        last_pos_y = snake[0][1]
+
+        --snake[0][0]
+        move_body(difficulty)
+    }
+}
+
+func move_body(difficulty: int) {
+    let pos_x = last_pos_x
+    let pos_y = last_pos_y
+
+    for let i = 1; i < len(snake); ++i {
+        let tmp_x = snake[i][0]
+        let tmp_y = snake[i][1]
+        snake[i][0] = pos_x
+        snake[i][1] = pos_y
+        pos_x = tmp_x
+        pos_y = tmp_y
+    }
+    
+    if difficulty == casual_difficulty {
+        for let i = 0; i < len(snake); ++i {
+            snake[i][0] = snake[i][0] % field_size;
+            snake[i][1] = snake[i][1] % field_size;
+            
+            if snake[i][0] < 0 {
+                snake[i][0] = snake[i][0] + field_size
+            }
+            if snake[i][1] < 0 {
+                snake[i][1] = snake[i][1] + field_size
+            }
+        }
+    }
+}

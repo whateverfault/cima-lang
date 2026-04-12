@@ -14,10 +14,18 @@ typedef enum {
     ERROR_DIV_BY_ZERO,
     ERROR_UNMATCHED_PAREN,
     ERROR_UNEXPECTED_TOKEN,
+    ERROR_UNEXPECTED_EOF,
+    ERROR_UNEXPECTED_CONTINUE,
+    ERROR_UNEXPECTED_BREAK,
+    ERROR_UNEXPECTED_RETURN,
+    UNEXPECTED_TYPE,
     ERROR_NOT_DEFINED,
     ERROR_CANNOT_ASSIGN_TO_CONST,
     ERROR_CANNOT_REASSIGN_CONST,
     ERROR_INDEX_OUT_OF_BOUNDS,
+
+    ERROR_BREAK_OUTSIDE_LOOP,
+    ERROR_CONTINUE_OUTSIDE_LOOP,
 
     ERROR_TOO_FEW_ARGS,
     ERROR_TOO_MANY_ARGS,
@@ -46,6 +54,9 @@ typedef enum {
     AST_ARR,
     AST_BLOCK,
     AST_IF,
+    AST_CONTINUE,
+    AST_BREAK,
+    AST_RETURN,
     AST_PROGRAM,
     AST_ERROR,
 } AST_Kind;
@@ -57,6 +68,11 @@ typedef enum {
     BINOP_DIV,
     BINOP_MOD,
     BINOP_POW,
+    BINOP_ASSIGN,
+    BINOP_LOGIC_AND,
+    BINOP_BIT_AND,
+    BINOP_LOGIC_OR,
+    BINOP_BIT_OR,
     BINOP_GT,
     BINOP_LT,
     BINOP_GTEQ,
@@ -64,10 +80,11 @@ typedef enum {
     BINOP_EQ,
     BINOP_NEQ,
 
-    BINOP_ASIGN,
 } BinaryOp;
 
 typedef enum {
+    UNOP_INCREMENT,
+    UNOP_DECREMENT,
     UNOP_NOT,
     UNOP_PLUS,
     UNOP_MINUS,
@@ -75,6 +92,7 @@ typedef enum {
 
 typedef struct AST_Node AST_Node;
 typedef struct AST_NodeName AST_NodeName;
+typedef struct AST_NodeFnDecl AST_NodeFuncDecl;
 
 typedef struct Value {
     ValueType *type;
@@ -101,6 +119,7 @@ typedef struct {
 typedef struct {
     String_Builder *name;
     ValueType *type;
+    bool constant;
 } Pattern;
 
 typedef struct {
@@ -108,6 +127,12 @@ typedef struct {
     size_t count;
     size_t capacity;
 } Patterns;
+
+typedef struct {
+    AST_NodeFuncDecl **items;
+    size_t count;
+    size_t capacity;
+} Funcs;
 
 typedef struct {
     AST_Node **items;
@@ -154,21 +179,28 @@ typedef struct {
     AST_Node *index;
 } AST_NodeIndex;
 
-typedef struct {
+typedef struct AST_NodeFnDecl {
     AST_FIELDS
     String_View name;
     Patterns args;
     AST_Node *body;
     ValueType *ret_type;
     bool constant;
-} AST_NodeFnStmt;
+} AST_NodeFuncDecl;
+
+typedef struct {
+    AST_FIELDS
+    String_View name;
+    Patterns fields;
+    Funcs funcs;
+    bool constant;
+} AST_NodeStructDecl;
 
 typedef struct {
     AST_FIELDS
     String_View name;
     ValueType *type;
     AST_Node *initializer;
-    bool has_initializer;
     bool constant;
 } AST_NodeLetStmt;
 
@@ -210,6 +242,19 @@ typedef struct {
 } AST_NodeBranch;
 
 typedef struct {
+    AST_FIELDS
+} AST_NodeContinue;
+
+typedef struct {
+    AST_FIELDS
+} AST_NodeBreak;
+
+typedef struct {
+    AST_FIELDS
+    AST_Node *node;
+} AST_NodeReturn;
+
+typedef struct {
     bool right_associative;
     size_t val;
 } Precedence;
@@ -221,11 +266,11 @@ void ast_free(AST_Node *root);
 ValueTypeArray *alloc_arr_type(ValueType *el_type);
 Value create_value(ValueType *type);
 
-AST_NodeBinOp *alloc_binop_expr(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
-AST_NodeUnOp *alloc_unop_expr(AST_Node *expr, UnaryOp op);
-AST_NodeLit *alloc_lit_expr(Value val);
-AST_NodeName *alloc_name_expr(String_View sb);
-AST_NodeError *alloc_error(ErrorKind err);
+AST_NodeBinOp *alloc_binop_node(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
+AST_NodeUnOp *alloc_unop_node(AST_Node *expr, UnaryOp op);
+AST_NodeLit *alloc_lit_node(Value val);
+AST_NodeName *alloc_name_node(String_View sb);
+AST_NodeError *alloc_error_node(ErrorKind err);
 AST_NodeArray *alloc_arr_node(Nodes nodes);
 
 ErrorKind parse_type(Lexer *l, ValueType **type);

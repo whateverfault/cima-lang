@@ -56,15 +56,16 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array 
                 return;
             }
             
-            Value val = execute_expr(context, expr);
+            EvalResult result = execute_expr(context, expr);
+            append_error(context, get_signal_error(result.sig));
             if (has_errors(context)) {
                 ast_free(expr);
                 return;
             }
 
-            if (val.type->tag == TYPE_STR) {
+            if (result.val.type->tag == TYPE_STR) {
                 String_View sv = {0};
-                sv_from_sb(&sv, val.as_ptr);
+                sv_from_sb(&sv, result.val.as_ptr);
                 format_str(sb, context, sv, va_args);
                 if (has_errors(context)) {
                     ast_free(expr);
@@ -72,7 +73,7 @@ void format_str(String_Builder *sb, Context *context, String_View fmt_sv, Array 
                 }
             }
             else {
-                to_str(sb, context, val);
+                to_str(sb, context, result.val);
                 if (has_errors(context)) {
                     ast_free(expr);
                     return;

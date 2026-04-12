@@ -8,6 +8,9 @@
 #define BOOL_CTYPE bool
 #define CHAR_CTYPE char
 
+#define INT_CTYPE_MIN INT_MIN
+#define INT_CTYPE_MAX INT_MAX
+
 typedef enum {
     TYPE_INT,
     TYPE_FLOAT,
