@@ -1,4 +1,4 @@
-const field_size = 16
+const field_size = 32
 
 const space = 0
 const body = 1

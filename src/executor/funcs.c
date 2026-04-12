@@ -275,7 +275,7 @@ Value read_key_func(Context *context, Context *fn_context) {
 
 Value clear_func(Context *context, Context *fn_context) {
     Value ret = create_value(VOID_TYPE);
-    printf("\033[2J\033[H");
+    printf("\x1b[2J\x1b[3J\x1b[H");
     fflush(stdout);
     return ret;
 }
