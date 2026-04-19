@@ -7,10 +7,11 @@ add_executable(ast_calc
         src/main.c
         src/lexer/lexer.c
         src/parser/parser.c
-        src/executor/funcs.c
-        src/types/type.c
+        src/executor/types/type.c
+        src/executor/funcs/funcs.c
         src/executor/executor.c
-        src/other/sys/sys.c)
+        src/other/sys/sys.c
+        src/other/built_in.c)
 
 target_include_directories(ast_calc PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src

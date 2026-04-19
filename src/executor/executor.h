@@ -3,6 +3,25 @@
 
 #include <stdbool.h>
 
+#include "error.h"
+#include "value.h"
+#include "symbols/symbol.h"
+#include "parser/ast.h"
+
+typedef struct HashMap HashMap;
+typedef struct {
+    HashMap *symbols;
+} Scope;
+
+typedef struct Context Context;
+typedef struct Context {
+    Context *global;
+    Scope scope;
+    Errors *errors;
+
+    HashMap *type_cache;
+} Context;
+
 typedef enum Signal {
     SIGNAL_NONE,
     SIGNAL_CONTINUE,
@@ -15,57 +34,30 @@ typedef struct EvalResult {
     Value val;
 } EvalResult;
 
-typedef struct {
-    ErrorKind *items;
-    size_t count;
-    size_t capacity;
-} Errors;
+void global_ctx_init(Context *ctx);
+void ctx_init(Context *ctx);
+void ctx_free(Context *ctx);
 
-typedef struct Var{
-    String_Builder *name;
-    Value val;
-    bool constant;
-} Var;
+bool has_errors(Context *ctx);
+void append_error(Context *ctx, RuntimeError err);
+RuntimeError get_signal_error(Signal sig);
 
-typedef struct Func Func;
-#define FUNC_FIELDS          \
-    FuncKind kind;           \
-    String_Builder *name;    \
-    Patterns args;           \
-    bool constant;
+Value create_value(Type *type);
+EvalResult create_result(Type *type);
 
-typedef struct HashMap HashMap;
-typedef struct {
-    HashMap *vars;
-    HashMap *funcs;
-} Scope;
+Array *alloc_arr(Context *ctx, Type *el_type);
 
-typedef struct Context{
-    Context *global;
-    Scope scope;
-    Errors *errors;
-} Context;
+bool resolve_name_sv(Context *ctx, String_View name_sv, Var **var);
+bool resolve_name_cstr(Context *ctx, char *name, Var **var);
+bool get_func(Context *ctx, String_View name_sv, Func **func);
 
-void context_init(Context *context);
-void context_free(Context *context);
+Member get_member_from_node(Context *ctx, AST_Node *node, Value *base);
 
-bool has_errors(Context *context);
-void append_error(Context *context, ErrorKind err);
-ErrorKind get_signal_error(Signal sig);
-
-EvalResult create_result(ValueType *type);
-
-Array *alloc_arr(ValueType *el_type);
-
-bool resolve_name_sv(Context *context, String_View *name_sv, Var **var);
-bool resolve_name_cstr(Context *context, char *name, Var **var);
-bool get_func(Context *context, String_View *name_sv, Func **func);
-
-Value execute_arr_expr(Context *context, AST_Node *node);
-Value execute_call_expr(Context *context, AST_Node *node);
-EvalResult execute_expr(Context *context, AST_Node *expr);
-EvalResult execute_nodes(Context *context, Nodes *nodes);
-EvalResult execute(Context *context, AST_Node *node);
-void execute_program(Context *context, AST_NodeProgram *program);
+Value execute_arr_expr(Context *ctx, AST_Node *node);
+Value execute_call_expr(Context *ctx, AST_Node *node);
+EvalResult execute_expr(Context *ctx, AST_Node *expr);
+EvalResult execute_nodes(Context *ctx, AST_Nodes *nodes);
+EvalResult execute(Context *ctx, AST_Node *node);
+void execute_program(Context *ctx, AST_NodeProgram *program);
 
 #endif //EXECUTOR_H

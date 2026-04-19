@@ -33,13 +33,15 @@ typedef enum {
     TOKEN_NEQ,
     
     TOKEN_ARROW,
-    TOKEN_ASIGN,
+    TOKEN_ASSIGN,
     
     TOKEN_INT,
     TOKEN_FLOAT,
     TOKEN_STR,
     TOKEN_CHAR,
     TOKEN_NAME,
+
+    TOKEN_AT,
     
     TOKEN_LPAREN,
     TOKEN_RPAREN,
@@ -68,6 +70,7 @@ typedef enum {
     TOKEN_KW_WHILE,
     TOKEN_KW_FOREVER,
     TOKEN_KW_CONST,
+    TOKEN_KW_STATIC,
     TOKEN_KW_LET,
     TOKEN_KW_STRUCT,
     TOKEN_KW_TRUE,

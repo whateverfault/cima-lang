@@ -1,41 +1,93 @@
-const field_size = 32
+# TODO: Move this example to structs instead of arrays
+# TODO: Implement enums
 
-const space = 0
-const body = 1
-const head = 2
-const apple = 3
+struct Cell {
+    static const Head  : char = '@'
+    static const Body  : char = '#'
+    static const Space : char = '.'
+    static const Apple : char = '%'
+}
 
-const head_symb = '@'
-const body_symb = '#'
-const space_symb = '.'
-const apple_symb = '%'
+struct Status {
+    static Win  : int = 0
+    static Lose : int = 1
+}
 
-let apple_spawned = false
-let apple_pos = []
-let snake = [[4, 4]]
+struct Difficulty {
+    static const Casual : int = 0
+    static const Normal : int = 1
+}
 
-const status_win = 0
-const status_lose = 1
-let status = status_win
+struct Position {
+    x : int
+    y : int   
+}
 
-const casual_difficulty = 0
-const normal_difficulty = 1
+struct Snake {
+    segments : [Position]
+    last_pos : Position
+}
 
-let last_pos_x = snake[0][0]
-let last_pos_y = snake[0][1]
+struct Field {
+    size : int
+    snake : Snake
+    apple : Position
+    appleSpawned : bool
+    
+    # TODO: Implement 'self'
+    
+    func print(field: Field) {
+        for let y = 0; y < field.size; ++y {
+            for let x = 0; x < field.size; ++x {
+                print("{get_cell(field, @Position{x, y})}")
+            }
+            print("\n")
+        }
+    }
+}
 
-menu_loop()
+struct Game {
+    field      : Field
+    status     : int
+    difficulty : int
+    debug      : bool
+}
+
+let game : Game
+game = game_init()
+
+main_loop(game)
 
 println("Press any key to exit.")
 read_key()
 
-func menu_loop(){
-    forever {
-        let difficulty = casual_difficulty
+func game_init() {
+    const fieldSize = 8
 
+    @Game{
+        field: @Field{
+                   size: fieldSize
+                   snake: @Snake{
+                                  segments: [
+                                      @Position{
+                                          x: fieldSize/2,
+                                          y: fieldSize/2,
+                                      }
+                                  ]
+                               }
+                   appleSpawned: false
+               }
+        status: Status.Win
+        difficulty: Difficulty.Normal
+        debug: false
+    }
+}
+
+func main_loop(game: Game){
+    forever {
         println("What difficulty do you chose? (Casual\\Normal)")
         
-        let choice = readln(false)
+        const choice = readln(false)
         while choice != "Casual" and choice != "Normal" {
             choice = readln(false)
             
@@ -45,20 +97,20 @@ func menu_loop(){
     
         clear()
         
-        if choice == "Casual" {
-            difficulty = casual_difficulty
+        if choice == "Casual" { 
+            game.difficulty = Difficulty.Casual
         }
         else {
-            difficulty = normal_difficulty
+            game.difficulty = Difficulty.Normal
         }
     
-        game_loop(difficulty)
+        game_loop(game)
         
-        if status == status_win {
+        if game.status == Status.Win {
             clear()
             println("Congratulations!!!")
         }
-        elif status == status_lose {
+        elif game.status == Status.Lose {
             clear()
             println("Ooops... You lost.")
         }
@@ -68,7 +120,7 @@ func menu_loop(){
         }
         
         println("Wanna try again? (Y\\n)")
-        let ans = read(false)
+        let ans = readkey()
         
         ans = if ans == 'Y' or ans == 'y' {
             'y'
@@ -83,10 +135,7 @@ func menu_loop(){
         clear()
         
         if ans == 'y' {
-            apple_pos = []
-            snake = [[4, 4]]
-            status = status_win
-            apple_spawned = false
+            game = game_init()
             continue
         }
         else {
@@ -95,185 +144,181 @@ func menu_loop(){
     }
 }
 
-func game_loop(difficulty: int) {
+func game_loop(game: Game) {
     forever {
-        if !apple_spawned {
-            spawn_apple()
+        if !game.field.appleSpawned {
+            spawn_apple(game.field)
         }
     
-        clear()
-        print_field()
-        
-        if false {
-            println("apple:\nx: {apple_pos[0]}, y: {apple_pos[1]}")
-            println("snake: {snake}")
-        }
+        move_cursor(0, 0)
+        game.field.print(game.field)
         
         let key = ' '
         
         while key != 'w' and key != 'a' and key != 's' and key != 'd' {
-            key = read_key()
+            key = readkey()
         
             if key == 'w' {
-                move_up(difficulty)
+                move_up(game.field)
             }
             elif key == 'a' {
-                move_left(difficulty)
+                move_left(game.field)
             }
             elif key == 's' {
-                move_down(difficulty)
+                move_down(game.field)
             }
             elif key == 'd' {
-                move_right(difficulty)
+                move_right(game.field)
             }
         }
         
-        if snake[0][0] == apple_pos[0] and snake[0][1] == apple_pos[1] {
-            apple_spawned = false
-            remove_at(apple_pos, 1)
-            remove_at(apple_pos, 0)
+        if game.difficulty == Difficulty.Casual {
+            wrap_position(game.field)
+        }
+        
+        if game.debug {
+            println("{game}")
+            readkey()
+        }
+        
+        let head = game.field.snake.segments[0]
+        
+        if head.x == game.field.apple.x and head.y == game.field.apple.y {
+            game.field.appleSpawned = false
             
-            append(snake, [last_pos_x, last_pos_y])
+            append(game.field.snake.segments, @Position{game.field.snake.last_pos.x, game.field.snake.last_pos.y})
             continue
         }
         
-        for let i = 1; i < len(snake); ++i {
-            if snake[0][0] == snake[i][0] and snake[0][1] == snake[i][1] {
-                status = status_lose
+        for let i = 1; i < len(game.field.snake.segments); ++i {
+            let segment = game.field.snake.segments[i]
+        
+            if head.x == segment.x and head.y == segment.y {
+                game.status = Status.Lose
                 return
             }
+        }
+        
+        if head.x < 0 or head.x >= game.field.size {
+            game.status = Status.Lose
+            return
+        }
+        if head.y < 0 or head.y >= game.field.size {
+            game.status = Status.Lose
+            return
         }
     }
 }
 
-func spawn_apple(){
-    let x = randint(0, field_size - 1)
-    let y = randint(0, field_size - 1)
+func spawn_apple(field: Field){
+    let x = randint(0, field.size/2)
+    let y = randint(0, field.size/2)
     
-    let cell = get_cell(x, y)
-    while cell == head or cell == body {
-        x = (x + 1) % field_size
-        y = (y + 1) % field_size
-        cell = get_cell(x, y)
+    let cell = get_cell(field, @Position{x, y})
+    while cell == Cell.Head or cell == Cell.Body {
+        x = (x + 1) % field.size
+        y = (y + 1) % field.size
+        cell = get_cell(field, @Position{x, y})
     }
     
-    append(apple_pos, x, y)
-    apple_spawned = true
+    field.apple = @Position{x, y}
+    field.appleSpawned = true
 }
 
-func print_field() {
-    for let y = 0; y < field_size; ++y {
-        for let x = 0; x < field_size; ++x {
-            let cell = get_cell(x, y)
-            
-            if cell == head {
-                print("{head_symb}")
-            }
-            elif cell == body {
-                print("{body_symb}")
-            }
-            elif cell == space {
-                print("{space_symb}")
-            }
-            elif cell == apple {
-                print("{apple_symb}")
-            }
-            else {
-                println("\nERROR: Wrong cell value. ({cell})")
-                return
-            }
-        }
-        print("\n")
-    }
-}
-
-func get_cell(x: int, y: int) : int {
-    for let i = 0; i < len(snake); ++i {
-        if x == snake[i][0] and y == snake[i][1] {
+func get_cell(field: Field, pos: Position) : char {
+    for let i = 0; i < len(field.snake.segments); ++i {
+        const segment = field.snake.segments[i]
+        
+        if pos.x == segment.x and pos.y == segment.y {
             return if i == 0 {
-                head
+                Cell.Head
             }
             else {
-                body
+                Cell.Body
             }
         }
     }
     
-    if apple_spawned and x == apple_pos[0] and y == apple_pos[1] {
-        return apple
+    if field.appleSpawned and pos.x == field.apple.x and pos.y == field.apple.y {
+        return Cell.Apple
     }
     
-    return space
+    return Cell.Space
 }
 
-func get_index(x: int, y: int) : int {
-    return y * size + x
+func get_index(field: Field, pos: Position) : int {
+    return pos.y * field.size + pos.x
 }
 
-func move_up(difficulty: int) {
-    if snake[0][1] > 0 {
-        last_pos_x = snake[0][0]
-        last_pos_y = snake[0][1]
-
-        --snake[0][1]
-        move_body(difficulty)
-    }
-}
-
-func move_down(difficulty: int) {
-    if snake[0][1] < field_size - 1 {
-        last_pos_x = snake[0][0]
-        last_pos_y = snake[0][1]
-
-        ++snake[0][1]
-        move_body(difficulty)
-    }
-}
-
-func move_right(difficulty: int) {
-    if snake[0][0] < field_size - 1 {
-        last_pos_x = snake[0][0]
-        last_pos_y = snake[0][1]
-
-        ++snake[0][0]
-        move_body(difficulty)
-    }
-}
-
-func move_left(difficulty: int) {
-    if snake[0][0] > 0 {
-        last_pos_x = snake[0][0]
-        last_pos_y = snake[0][1]
-
-        --snake[0][0]
-        move_body(difficulty)
-    }
-}
-
-func move_body(difficulty: int) {
-    let pos_x = last_pos_x
-    let pos_y = last_pos_y
-
-    for let i = 1; i < len(snake); ++i {
-        let tmp_x = snake[i][0]
-        let tmp_y = snake[i][1]
-        snake[i][0] = pos_x
-        snake[i][1] = pos_y
-        pos_x = tmp_x
-        pos_y = tmp_y
-    }
+func move_up(field: Field) {
+    const head = field.snake.segments[0]
     
-    if difficulty == casual_difficulty {
-        for let i = 0; i < len(snake); ++i {
-            snake[i][0] = snake[i][0] % field_size;
-            snake[i][1] = snake[i][1] % field_size;
-            
-            if snake[i][0] < 0 {
-                snake[i][0] = snake[i][0] + field_size
-            }
-            if snake[i][1] < 0 {
-                snake[i][1] = snake[i][1] + field_size
-            }
+    field.snake.last_pos.x = head.x
+    field.snake.last_pos.y = head.y
+
+    --head.y
+    move_body(field)
+}
+
+func move_down(field: Field) {
+    const head = field.snake.segments[0]
+
+    field.snake.last_pos.x = head.x
+    field.snake.last_pos.y = head.y
+
+    ++head.y
+    move_body(field)
+}
+
+func move_right(field: Field) {
+    const head = field.snake.segments[0]
+
+    field.snake.last_pos.x = head.x
+    field.snake.last_pos.y = head.y
+
+    ++head.x
+    move_body(field)
+}
+
+func move_left(field: Field) {
+    const head = field.snake.segments[0]
+    
+    field.snake.last_pos.x = head.x
+    field.snake.last_pos.y = head.y
+    
+    --head.x
+    move_body(field)
+}
+
+func move_body(field: Field) {
+    let pos : Position
+    pos.x = field.snake.last_pos.x
+    pos.y = field.snake.last_pos.y
+
+    for let i = 1; i < len(field.snake.segments); ++i {
+        const segment = field.snake.segments[i]
+        let tmp : Position
+        tmp.x = segment.x
+        tmp.y = segment.y
+        segment.x = pos.x
+        segment.y = pos.y
+        pos.x = tmp.x
+        pos.y = tmp.y
+    }
+}
+
+func wrap_position(field: Field) {
+    for let i = 0; i < len(field.snake.segments); ++i {
+        const segment = field.snake.segments[i]
+        
+        segment.x = segment.x % field.size;
+        segment.y = segment.y % field.size;
+        
+        if segment.x < 0 {
+            segment.x = segment.x + field.size
+        }
+        if segment.y < 0 {
+            segment.y = segment.y + field.size
         }
     }
 }

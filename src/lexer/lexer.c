@@ -17,7 +17,7 @@ bool is_binop(Token tok) {
         case TOKEN_SLASH:
         case TOKEN_PERCENT:
         case TOKEN_CARET:
-        case TOKEN_ASIGN:
+        case TOKEN_ASSIGN:
         case TOKEN_ANDAND:
         case TOKEN_AND:
         case TOKEN_OROR:
@@ -51,6 +51,7 @@ bool is_unop(Token tok) {
 
 bool is_special(Token tok) {
     switch (tok.kind) {
+        case TOKEN_AT:
         case TOKEN_LPAREN:
         case TOKEN_RPAREN:
         case TOKEN_LBRACK:
@@ -107,6 +108,7 @@ bool is_special_symb(char symb) {
         case '{':
         case '}':
         case ',':
+        case '.':
         case ':':
         case ';':
         case '\"':
@@ -315,6 +317,9 @@ Token get_lit_token(Lexer *l) {
         else if (sv_cmp_cstr(&tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
+        else if (sv_cmp_cstr(&tok.val, "static")) {
+            tok.kind = TOKEN_KW_STATIC;
+        }
         else if (sv_cmp_cstr(&tok.val, "for")) {
             tok.kind = TOKEN_KW_FOR;
         }
@@ -420,6 +425,10 @@ switch (CURRENT(l)) {
         case ';': {
             tok.kind = TOKEN_SEMICOLON;
         } break;
+
+        case '@': {
+            tok.kind = TOKEN_AT;
+        } break;
             
         default: {
             tok.val.count = 0;
@@ -435,7 +444,7 @@ switch (CURRENT(l)) {
 
 Token get_eq_token(Lexer *l) {
     Token tok = {
-        .kind = TOKEN_ASIGN,
+        .kind = TOKEN_ASSIGN,
         .val = (String_View){
             .items = l->source.items + l->pos,
             .count = 1,
@@ -697,7 +706,9 @@ Token lexer_next(Lexer *l) {
         } break;
 
         case '#': {
-            skip_comment(l);
+            while (INBOUNDS(l) && CURRENT(l) == '#') {
+                skip_comment(l);
+            }
             tok = lexer_next(l);
         } break;
             

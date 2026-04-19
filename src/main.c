@@ -3,38 +3,79 @@
 
 #include "lexer/lexer.h"
 #include "parser/parser.h"
+#include "executor/error.h"
 #include "executor/executor.h"
 
-void print_error(ErrorKind err) {
+void print_parser_error(ParserError err) {
+    if (err == PERROR_NONE) {
+        return;
+    }
+
+    printf("\nPARSER ERROR: ");
+
+    switch (err) {
+        case PERROR_WRONG_NUMBER_FORMAT: {
+            printf("Wrong number format.\n");
+        } break;
+
+        case PERROR_VALUE_OUT_OF_RANGE: {
+            printf("Value out of range.\n");
+        } break;
+
+        case PERROR_UNMATCHED_PAREN: {
+            printf("Unmatched parenthesis.\n");
+        } break;
+
+        case PERROR_UNEXPECTED_TOKEN: {
+            printf("Unexpected token.\n");
+        } break;
+
+        case PERROR_UNEXPECTED_EOF: {
+            printf("Unexpected end of file.\n");
+        } break;
+
+        case PERROR_MULTI_CHARACTER_CHAR_LIT: {
+            printf("Multi character char literal.\n");
+        } break;
+
+        case PERROR_EMPTY_CHAR_LIT: {
+            printf("Empty character literal.\n");
+        } break;
+
+        case PERROR_WRONG_FIELD_NAME_FORMAT: {
+            printf("Wrong initializer name format.\n");
+        } break;
+
+        case PERROR_WRONG_INITIALIZER_OBJECT: {
+            printf("Wrong initializer object.\n");
+        } break;
+
+        case PERROR_MULTIPLE_INITIALIZERS: {
+            printf("Multiple initializers for one field.\n");
+        } break;
+
+        case PERROR_MULTIPLE_ARGS: {
+            printf("Multiple arguments for one function parameter.\n");
+        } break;
+
+        case PERROR_ARGS_AFTER_VA_ARG: {
+            printf("Arguments after variadic.\n");
+        } break;
+            
+        default: assert(0 && "UNREACHABLE");
+    }
+}
+
+void print_runtime_error(RuntimeError err) {
     if (err == ERROR_NONE) {
         return;
     }
     
-    printf("\nERROR: ");
+    printf("\nRUNTIME ERROR: ");
 
     switch (err) {
-        case ERROR_WRONG_NUMBER_FORMAT: {
-            printf("Wrong number format.\n");
-        } break;
-
-        case ERROR_VALUE_OUT_OF_RANGE: {
-            printf("Value out of range.\n");
-        } break;
-
         case ERROR_DIV_BY_ZERO: {
             printf("Division by zero.\n");
-        } break;
-
-        case ERROR_UNMATCHED_PAREN: {
-            printf("Unmatched parenthesis.\n");
-        } break;
-
-        case ERROR_UNEXPECTED_TOKEN: {
-            printf("Unexpected token.\n");
-        } break;
-
-        case ERROR_UNEXPECTED_EOF: {
-            printf("Unexpected end of file.\n");
         } break;
 
         case ERROR_UNEXPECTED_CONTINUE: {
@@ -77,28 +118,12 @@ void print_error(ErrorKind err) {
             printf("Incompatible types.\n");
         } break;
 
-        case UNEXPECTED_TYPE: {
-            printf("Unexpected type.\n");
-        } break;
-
         case ERROR_UNEXPECTED_NAMED_ARG: {
             printf("Unexpected named argument.\n");
         } break;
 
-        case ERROR_MULTI_CHARACTER_CHAR_LIT: {
-            printf("Multi character char literal.\n");
-        } break;
-
-        case ERROR_EMPTY_CHAR_LIT: {
-            printf("Empty character literal.\n");
-        } break;
-
         case ERROR_FORMAT_MISMATCHES_VA_ARGS_COUNT: {
             printf("Format mismatches variadic arguments count.\n");
-        } break;
-
-        case ERROR_ARGS_AFTER_VA_ARG: {
-            printf("Unexpected argument after variadic.\n");
         } break;
         
         case ERROR_CLOSED_STDIN: {
@@ -116,6 +141,26 @@ void print_error(ErrorKind err) {
         case ERROR_BREAK_OUTSIDE_LOOP: {
             printf("Break signal outside a loop.\n");
         } break;
+
+        case ERROR_UNKNOWN_TYPE: {
+            printf("Unknown type.\n");
+        } break;
+
+        case ERROR_UNKNOWN_FIELD: {
+            printf("Unknown field.\n");
+        } break;
+
+        case ERROR_WRONG_FORMAT_STR: {
+            printf("Wrong format string.\n");
+        } break;
+
+        case ERROR_MULTIPLE_INITIALIZERS: {
+            printf("Multiple initializers for one field.\n");
+        } break;
+
+        case ERROR_ARGS_AFTER_NAMED_VA_ARG: {
+            printf("Arguments after named variadic.\n");
+        } break;
             
         default: assert(0 && "UNREACHABLE");
     }
@@ -125,7 +170,8 @@ void usage(char **argv) {
     fprintf(stderr, "USAGE: %s <path>", argv[0]);
 }
 
-// TODO: Implement support of 06.cima features
+// TODO: Implement garbage collector so no memory is leaked on structure reassignment
+
 int main(int argc, char **argv) {
     String_Builder source_sb = {0};
 
@@ -139,8 +185,8 @@ int main(int argc, char **argv) {
         return 1;
     }
     
-    Context context = {0};
-    context_init(&context);
+    Context ctx = {0};
+    global_ctx_init(&ctx);
 
     String_View source_sv = {0};
     sv_from_sb(&source_sv, &source_sb);
@@ -151,15 +197,23 @@ int main(int argc, char **argv) {
     };
     
     lexer_init(&l);
-    
-    AST_NodeProgram *parsed = parse_program(&l);
-    execute_program(&context, parsed);
 
-    for (size_t i = 0; i < context.errors->count; ++i) {
-        print_error(context.errors->items[i]);
+    AST_NodeProgram *program;
+    ParserError err = parse_program(&l, &program);
+    if (err != PERROR_NONE) {
+        print_parser_error(err);
+        ctx_free(&ctx);
+        da_free(source_sb);
+        return 0;
+    }
+    
+    execute_program(&ctx, program);
+
+    for (size_t i = 0; i < ctx.errors->count; ++i) {
+        print_runtime_error(ctx.errors->items[i]);
     }
 
-    context_free(&context);
+    ctx_free(&ctx);
     da_free(source_sb);
     return 0;
 }

@@ -1,0 +1,13 @@
+println("{foo()}") # 42
+
+func foo() : int {
+    return 42
+}
+
+println("{foo()}") # 42
+
+func foo() : int {
+    return 69
+}
+
+println("{foo()}") # 69

@@ -3,41 +3,148 @@
 
 #include "parser/parser.h"
 
+#include "executor/types/type.h"
+
 #define NOTHING_IMPLEMENTATION
 #include "nothing/nothing.h"
-#include "types/type.h"
-#include "other/operations.h"
 
+#include "executor/funcs/funcs.h"
+#include "executor/error.h"
 #include "executor.h"
-#include "funcs.h"
+
 #include "other/built_in.h"
 
-void context_init(Context *context) {
-    context->global = context;
-    context->scope.vars = hm_alloc();
-    context->scope.funcs = hm_alloc();
-    context->errors = (Errors*)calloc(1, sizeof(Errors));
+void global_ctx_init(Context *ctx) {
+    ctx->global = ctx;
+    ctx->scope.symbols = hm_alloc();
+    ctx->type_cache = hm_alloc();
+    ctx->errors = calloc(1, sizeof(Errors));
+
+    for (size_t i = 0; i < builtin_vars_count; ++i) {
+        hm_put_sb(ctx->scope.symbols, builtin_vars[i].name, &builtin_vars[i]);
+    }
+    
+    for (size_t i = 0; i < builtin_funcs_count; ++i) {
+        builtin_funcs[i].type = alloc_func_type(ctx, (void*)&builtin_funcs[i]);
+        hm_put_sb(ctx->scope.symbols, builtin_funcs[i].name, &builtin_funcs[i]);
+    }
+
+    for (size_t i = 0; i < builtin_types_count; ++i) {
+        hm_put_sb(ctx->scope.symbols, builtin_types[i]->name, builtin_types[i]);
+    }
 }
 
-void context_free(Context *context) {
-    hm_free(context->scope.vars);
-    hm_free(context->scope.funcs);
-    da_pfree(context->errors);
+void ctx_free(Context *ctx) {
+    hm_free(ctx->scope.symbols);
+    hm_free(ctx->type_cache);
+    da_pfree(ctx->errors);
 }
 
-bool has_errors(Context *context) {
-    return context->errors->count > 0;
+void pattern_free(Pattern pattern) {
+    if (pattern.name != NULL) {
+        free(pattern.name->items);
+        free(pattern.name);
+    }
 }
 
-void append_error(Context *context, ErrorKind err) {
+void patterns_free(Patterns patterns) {
+    for (size_t i = 0; i < patterns.count; ++i) {
+        pattern_free(patterns.items[i]);
+    }
+
+    da_free(patterns);
+}
+
+void field_free(Member pattern) {
+    if (pattern.name != NULL) {
+        free(pattern.name->items);
+        free(pattern.name);
+    }
+}
+
+void fields_free(Members fields) {
+    for (size_t i = 0; i < fields.count; ++i) {
+        field_free(fields.items[i]);
+    }
+
+    da_free(fields);
+}
+
+void func_free(Func *func) {
+    if (func == NULL) {
+        return;
+    }
+    
+    if (func->name != NULL) {
+        free(func->name->items);
+        free(func->name);
+    }
+
+    patterns_free(func->args);
+}
+
+void funcs_free(Funcs funcs) {
+    for (size_t i = 0; i < funcs.count; ++i) {
+        func_free(funcs.items[i]);
+    }
+
+    free(funcs.items);
+}
+
+void var_free(Var *var) {
+    if (var == NULL) {
+        return;
+    }
+    
+    if (var->name != NULL) {
+        free(var->name->items);
+        free(var->name);
+    }
+}
+
+void type_free(Type *type) {
+    if (type == NULL) {
+        return;
+    }
+    
+    if (type->name != NULL) {
+        free(type->name->items);
+        free(type->name);
+    }
+
+    type_free(type->el_type);
+    fields_free(type->members);
+}
+
+void symbol_free(Symbol *symb) {
+    switch (symb->symb_kind) {
+        case SYMB_TYPE: {
+            type_free((void*)symb);
+        } break;
+
+        case SYMB_VAR: {
+            var_free((void*)symb);
+        } break;
+        
+        case SYMB_FUNC: {
+            func_free((void*)symb);
+        } break;
+    }
+}
+
+bool has_errors(Context *ctx) {
+    return ctx->errors->count > 0;
+}
+
+void append_error(Context *ctx, RuntimeError err) {
     if (err == ERROR_NONE) {
         return;
     }
     
-    da_append(context->errors, err);
+    da_append(ctx->errors, err);
 }
 
-ErrorKind get_signal_error(Signal sig) {
+RuntimeError get_signal_error(Signal sig) {
     switch (sig) {
         case SIGNAL_CONTINUE: return ERROR_CONTINUE_OUTSIDE_LOOP;
         case SIGNAL_BREAK: return ERROR_BREAK_OUTSIDE_LOOP;
@@ -45,7 +152,7 @@ ErrorKind get_signal_error(Signal sig) {
     }
 }
 
-ErrorKind get_signal_error_unexpected(Signal sig) {
+RuntimeError get_signal_error_unexpected(Signal sig) {
     switch (sig) {
         case SIGNAL_CONTINUE: return ERROR_UNEXPECTED_CONTINUE;
         case SIGNAL_BREAK: return ERROR_UNEXPECTED_BREAK;
@@ -54,96 +161,103 @@ ErrorKind get_signal_error_unexpected(Signal sig) {
     }
 }
 
-Array *alloc_arr(ValueType *el_type) {
-    Array *arr = (Array*)malloc(sizeof(Array));
-    assert(arr != NULL && "Memory allocation failed");
-
-    arr->els = (ArrayElements){0};
-    arr->el_type = el_type;
+Array *alloc_arr(Context *ctx, Type *el_type) {
+    Type *array_type = alloc_array_type(ctx, el_type);
+    Array *arr = alloc_type_value(ctx, array_type);
     
     return arr;
 }
 
-Var *alloc_var(String_Builder *name_sb, Value val, bool constant) {
-    Var *var = (Var*)malloc(sizeof(Var));
-    assert(var != NULL && "Memory allocation failed");
+Value alloc_func(Context *ctx, Func *func) {
+    Type *func_type = alloc_func_type(ctx, func);
 
+    Value val = {
+        .type = func_type,
+        .as_ptr = func,
+    };
+    
+    return val;
+}
+
+Var *alloc_var(String_Builder *name_sb, Value val, bool constant) {
+    Var *var = (Var*)calloc(1, sizeof(Var));
+    assert(var != NULL && "Memory allocation failed");
+    
+    var->symb_kind = SYMB_VAR;
     var->name = name_sb;
     var->val = val;
     var->constant = constant;
+    var->is_static = false;
     
     return var;
 }
 
-FuncCustom *alloc_custom_func(String_Builder *name, Patterns args, AST_Node *body, bool constant) {
-    FuncCustom *func = (FuncCustom*)malloc(sizeof(FuncCustom));
+FuncCustom *alloc_custom_func(Context *ctx, String_Builder *name, Patterns args, AST_Node *body, Type *ret_type, bool is_const, bool is_static) {
+    FuncCustom *func = (FuncCustom*)calloc(1, sizeof(FuncCustom));
     assert(func != NULL && "Memory allocation failed");
-
+    
+    func->symb_kind = SYMB_FUNC;
     func->kind = FUNC_CUSTOM;
+    func->ret_type = ret_type;
     func->name = name;
     func->body = body;
     func->args = args;
-    func->constant = constant;
+    func->constant = is_const;
+    func->is_static = is_static;
+    func->type = alloc_func_type(ctx, (void*)func);
 
     return func;
 }
 
-EvalResult create_result(ValueType *type) {
+Value create_value(Type *type) {
+    return (Value){
+        .type = type,
+        .as_ptr = NULL,
+    };
+}
+
+EvalResult create_result(Type *type) {
     return (EvalResult){
         .sig = SIGNAL_NONE,
         .val = create_value(type),
     };
 }
 
-bool get_var(Context *context, String_View *name_sv, Var **variable) {
-    for (size_t i = 0; i < builtin_vars_count; ++i) {
-        if (sv_cmp_sb(name_sv, builtin_vars[i].name)) {
-            *variable = &builtin_vars[i];
-            return true;
-        }
-    }
-
-    *variable = hm_nget(context->scope.vars, name_sv->items, name_sv->count);
-    return *variable != NULL;
+bool get_symbol(Context *ctx, String_View name_sv, Symbol **symb) {
+    assert(symb != NULL);
+    
+    *symb = hm_nget(ctx->scope.symbols, name_sv.items, name_sv.count);
+    return *symb != NULL;
 }
 
-bool get_func(Context *context, String_View *name_sv, Func **func) {
-    for (size_t i = 0; i < builtin_funcs_count; ++i) {
-        if (sv_cmp_sb(name_sv, builtin_funcs[i].name)) {
-            *func = (void*)&builtin_funcs[i];
-            return true;
-        }
-    }
-
-    *func = hm_nget(context->scope.funcs, name_sv->items, name_sv->count);
-    return *func != NULL;
+bool resolve_symb(Context *ctx, String_View type_sv, Symbol **symb) {
+    return symb != NULL && get_symbol(ctx, type_sv, symb) && *symb != NULL;
 }
 
-bool resolve_name(Context *context, AST_Node *name, Var **var) {
+bool resolve_name(Context *ctx, AST_Node *name, Var **var) {
     AST_NodeName *name_node = (AST_NodeName*)name;
-    return get_var(context, &name_node->name, var) && var != NULL;
+    return get_symbol(ctx, name_node->name, (void*)var) && var != NULL;
 }
 
-bool resolve_name_sv(Context *context, String_View *name_sv, Var **var) {
-    return get_var(context, name_sv, var) && var != NULL;
+bool resolve_name_sv(Context *ctx, String_View name_sv, Var **var) {
+    return get_symbol(ctx, name_sv, (void*)var) && var != NULL;
 }
 
-bool resolve_name_cstr(Context *context, char *name, Var **var) {
+bool resolve_name_cstr(Context *ctx, char *name, Var **var) {
     String_View sv = {
         .items = name,
         .count = strlen(name),
     };
-    return resolve_name_sv(context, &sv, var);
+    return resolve_symb(ctx, sv, (void*)var);
 }
 
-bool resolve_name_node(Context *context, AST_Node *node, Var **var) {
+bool resolve_name_node(Context *ctx, AST_Node *node, Var **var) {
     AST_NodeName *name_node = (void*)node;
-    return resolve_name_sv(context, &name_node->name, var);
+    return resolve_symb(ctx, name_node->name, (void*)var);
 }
 
-bool resolve_func(Context *context, AST_Node *node, Func **func) {
-    AST_NodeCall *call_node = (void*)node;
-    return get_func(context, &call_node->name, func) && func != NULL;
+bool resolve_func(Context *ctx, String_View name, Func **func) {
+    return resolve_symb(ctx, name, (void*)func);
 }
 
 bool is_node_value(AST_Node *node) {
@@ -153,7 +267,8 @@ bool is_node_value(AST_Node *node) {
 bool is_assignable(AST_Node *node) {
     switch (node->kind) {
         case AST_INDEX:
-        case AST_NAME: return true;
+        case AST_NAME:
+        case AST_MEMBER_ACCESS: return true;
 
         default: return false;
     }
@@ -184,53 +299,260 @@ bool is_assignment(AST_Node *node) {
     }
 }
 
-void register_func(Context *context, AST_Node *node) {
-    assert(node->kind == AST_FN);
+Type *resolve_type(Context *ctx, AST_Type *ast_type) {
+    if (ast_type == NULL || !ast_type->provided_name) {
+        if (ast_type != NULL && ast_type->is_array) {
+            return alloc_array_type(ctx, resolve_type(ctx, ast_type->el_type));
+        }
+        
+        return ANY_TYPE;
+    }
+    
+    Type *type = NULL;
+    if (!resolve_symb(ctx, ast_type->name, (void*)&type) || type->symb_kind != SYMB_TYPE) {
+        append_error(ctx, ERROR_UNKNOWN_TYPE);
+        return type;
+    }
 
-    Func *check = NULL;
-    if (resolve_func(context, node, &check)
-    &&  check != NULL && check->constant) {
-        append_error(context, ERROR_CANNOT_REASSIGN_CONST);
+    if (ast_type->el_type != NULL) {
+        type->el_type = resolve_type(ctx, ast_type->el_type);
+    }
+    
+    return type;
+}
+
+void resolve_pattern(Context *ctx, AST_Pattern ast_pattern, Pattern *pattern) {
+    String_Builder *name_sb = sb_alloc();
+    sv_to_sb(&ast_pattern.name, name_sb);
+
+    Type *type = resolve_type(ctx, ast_pattern.type);
+    if (has_errors(ctx)) {
         return;
     }
     
-    AST_NodeFuncDecl *func_node = (AST_NodeFuncDecl*)node;
-    
-    String_Builder *sb = sb_alloc();
-    sv_to_sb(&func_node->name, sb);
-    
-    FuncCustom *func = alloc_custom_func(sb, func_node->args, func_node->body, func_node->constant);
-    assert(hm_nput(context->scope.funcs, func_node->name.items, func_node->name.count, func) == 0 && "Failed to register function.");
+    *pattern = (Pattern){
+        .name = name_sb,
+        .type = type,
+        .initializer = ast_pattern.initializer,
+        .constant = ast_pattern.is_const,
+    };
 }
 
-void register_var(Context *context, AST_Node *node) {
+void resolve_patterns(Context *ctx, AST_Patterns ast_patterns, Patterns *patterns) {
+    for (size_t i = 0; i < ast_patterns.count; ++i) {
+        Pattern pattern = {0};
+        resolve_pattern(ctx, ast_patterns.items[i], &pattern);
+        if (has_errors(ctx)) {
+            return;
+        }
+
+        da_append(patterns, pattern);
+    }
+}
+
+void resolve_field(Context *ctx, AST_Pattern ast_field, size_t offset, Member *member) {
+    String_Builder *name_sb = sb_alloc();
+    sv_to_sb(&ast_field.name, name_sb);
+
+    Type *type = resolve_type(ctx, ast_field.type);
+    if (has_errors(ctx)) {
+        return;
+    }
+    
+    *member = (Member){
+        .name = name_sb,
+        .type = type,
+        .kind = MEMBER_FIELD,
+        .field = {
+            .offset = offset,
+        },
+        .is_const = ast_field.is_const,
+        .is_static = ast_field.is_static,
+    };
+
+    if (member->is_static) {
+        EvalResult result = execute(ctx, ast_field.initializer);
+        append_error(ctx, get_signal_error_unexpected(result.sig));
+        if (has_errors(ctx)) {
+            return;
+        }
+        
+        member->field.static_initializer = result.val;
+    }
+    else {
+        member->field.initializer = ast_field.initializer;
+    }
+}
+
+void resolve_fields(Context *ctx, AST_Patterns ast_patterns, Members *fields) {
+    size_t offset = 0;
+    
+    for (size_t i = 0; i < ast_patterns.count; ++i) {
+        Member member = {0};
+        resolve_field(ctx, ast_patterns.items[i], offset, &member);
+        if (has_errors(ctx)) {
+            return;
+        }
+
+        offset = ALIGN(offset, member.type->alignment);
+        member.field.offset = offset;
+        offset += member.type->size;
+        
+        da_append(fields, member);
+    }
+}
+
+void resolve_methods(Context *ctx, AST_Nodes ast_methods, Members *members) {
+    for (size_t i = 0; i < ast_methods.count; ++i) {
+        AST_NodeFuncDecl *func_node = (void*)ast_methods.items[i];
+
+        Patterns args = {0};
+        resolve_patterns(ctx, func_node->args, &args);
+        if (has_errors(ctx)) {
+            return;
+        }
+
+        Type *ret_type = resolve_type(ctx, func_node->ret_type);
+        
+        String_Builder *name_sb = sb_alloc();
+        sv_to_sb(&func_node->name, name_sb);
+        
+        FuncCustom *func = alloc_custom_func(ctx, name_sb, args, func_node->body, ret_type, func_node->is_const, func_node->is_static);
+        Type *func_type = alloc_func_type(ctx, (void*)func);
+        Member method = {
+            .name = func->name,
+            .type = func_type,
+            .is_const = func_node->is_const,
+            .kind = MEMBER_METHOD,
+            .method = {
+                .func = (Func*)func,
+            },
+        };
+        da_append(members, method);
+    }
+}
+
+// TODO: Implement function overloading
+
+void register_func(Context *ctx, AST_Node *node) {
+    assert(node->kind == AST_FUNC_DECL);
+
+    AST_NodeFuncDecl *func_node = (AST_NodeFuncDecl*)node;
+    
+    Func *check = NULL;
+    if (resolve_func(ctx, func_node->name, &check)
+    &&  check != NULL && check->constant) {
+        append_error(ctx, ERROR_CANNOT_REASSIGN_CONST);
+        return;
+    }
+
+    Patterns args = {0};
+    resolve_patterns(ctx, func_node->args, &args);
+    if (has_errors(ctx)) {
+        return;
+    }
+
+    Type *ret_type = resolve_type(ctx, func_node->ret_type);
+    if (has_errors(ctx)) {
+        return;
+    }
+
+    String_Builder *name_sb = NULL;
+    if (check == NULL) {
+        name_sb = sb_alloc();
+        sv_to_sb(&func_node->name, name_sb);
+    }
+    else {
+        name_sb = check->name;
+        patterns_free(check->args);
+    }
+    
+    FuncCustom *func = alloc_custom_func(ctx, name_sb, args, func_node->body, ret_type, func_node->is_const, func_node->is_static);
+    assert(hm_nput(ctx->scope.symbols, func_node->name.items, func_node->name.count, func) == 0 && "Failed to register function.");
+}
+
+void register_struct(Context *ctx, AST_Node *node) {
+    assert(node->kind == AST_STRUCT_DECL);
+
+    AST_NodeStructDecl *struct_node = (AST_NodeStructDecl*)node;
+    
+    Type *check = NULL;
+    if (resolve_symb(ctx, struct_node->name, (void*)&check) && check != NULL) {
+        if (check->kind != TYPE_STRUCT) {
+            append_error(ctx, ERROR_ILLEGAL_TYPE_REDEFINITION);
+            return;
+        }
+        
+        if (check->constant) {
+            append_error(ctx, ERROR_CANNOT_REASSIGN_CONST);
+            return;
+        }
+    }
+    
+    String_Builder *name_sb = NULL;
+    if (check == NULL) {
+        name_sb = sb_alloc();
+        sv_to_sb(&struct_node->name, name_sb);
+    }
+    else {
+        name_sb = check->name;
+        fields_free(check->members);
+    }
+
+    Members members = {0};
+    resolve_fields(ctx, struct_node->fields, &members);
+    if (has_errors(ctx)) {
+        return;
+    }
+    
+    Type *type = alloc_struct_type(name_sb, members, NULL, struct_node->constant);
+    assert(hm_put_sb(ctx->scope.symbols, type->name, type) == 0 && "Failed to register type.");
+
+    resolve_methods(ctx, struct_node->methods, &type->members);
+}
+
+void register_var(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_LET);
 
     Var *check = NULL;
-    if (resolve_name(context, node, &check)
+    if (resolve_name(ctx, node, &check)
     &&  check != NULL && check->constant) {
-        append_error(context, ERROR_CANNOT_REASSIGN_CONST);
+        append_error(ctx, ERROR_CANNOT_REASSIGN_CONST);
         return;
     }
     
     AST_NodeLetStmt *let_node = (void*)node;
-
-    EvalResult result = create_result(let_node->type);
+    
+    Type *provided_type = resolve_type(ctx, let_node->type);
+    if (has_errors(ctx)) {
+        return;
+    }
+    
+    EvalResult result = create_result(provided_type);
     if (let_node->initializer != NULL) {
-        result = execute_expr(context, let_node->initializer);
-        append_error(context, get_signal_error(result.sig));
-        if (has_errors(context)) {
+        result = execute_expr(ctx, let_node->initializer);
+        append_error(ctx, get_signal_error(result.sig));
+        if (has_errors(ctx)) {
             return;
         }
+
+        // TODO: Handle 'any' type properly
+        result.val = cast_value(ctx, result.val, provided_type);
+        if (has_errors(ctx)) {
+            return;
+        }
+    }
+    else {
+        result.val.as_ptr = alloc_type_value(ctx, provided_type);
     }
 
     Var *var = NULL;
     String_Builder *sb = sb_alloc();
     sv_to_sb(&let_node->name, sb);
     
-    if (!resolve_name_sv(context, &let_node->name, &var)) {
+    if (!resolve_name_sv(ctx, let_node->name, &var)) {
         var = alloc_var(sb, result.val, let_node->constant);
-        assert(hm_nput(context->scope.vars, let_node->name.items, let_node->name.count, var) == 0 && "Failed to register function.");
+        assert(hm_nput(ctx->scope.symbols, let_node->name.items, let_node->name.count, var) == 0 && "Failed to register function.");
         return;
     }
 
@@ -238,7 +560,7 @@ void register_var(Context *context, AST_Node *node) {
     var->constant = let_node->constant;
 }
 
-EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
+EvalResult execute_loop_stmt(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_FOR);
 
     AST_NodeForStmt *for_node = (void*)node;
@@ -246,9 +568,9 @@ EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
     EvalResult result = create_result(VOID_TYPE);
 
     if (for_node->initializer != NULL) {
-        result = execute(context, for_node->initializer);
-        append_error(context, get_signal_error(result.sig));
-        if (has_errors(context)) {
+        result = execute(ctx, for_node->initializer);
+        append_error(ctx, get_signal_error(result.sig));
+        if (has_errors(ctx)) {
             return result;
         }
     }
@@ -258,15 +580,15 @@ EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
         condition.val.as_int = true;
         
         if (for_node->condition != NULL) {
-            condition = execute_expr(context, for_node->condition);
-            append_error(context, get_signal_error(condition.sig));
-            if (has_errors(context)) {
+            condition = execute_expr(ctx, for_node->condition);
+            append_error(ctx, get_signal_error(condition.sig));
+            if (has_errors(ctx)) {
                 return result;
             }
         }
 
-        bool condition_value = to_bool(context, condition.val);
-        if (has_errors(context)) {
+        bool condition_value = to_bool(ctx, condition.val);
+        if (has_errors(ctx)) {
             return result;
         }
         
@@ -274,12 +596,16 @@ EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
             break;
         }
 
-        result = execute(context, for_node->body);
+        result = execute(ctx, for_node->body);
+        if (has_errors(ctx)) {
+            return result;
+        }
+        
         if (result.sig == SIGNAL_CONTINUE) {
             if (for_node->next != NULL) {
-                EvalResult next_result = execute_expr(context, for_node->next);
-                append_error(context, get_signal_error(next_result.sig));
-                if (has_errors(context)) {
+                EvalResult next_result = execute_expr(ctx, for_node->next);
+                append_error(ctx, get_signal_error(next_result.sig));
+                if (has_errors(ctx)) {
                     return result;
                 }
             }
@@ -296,15 +622,11 @@ EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
         if (result.sig == SIGNAL_RETURN) {
             return result;
         }
-        
-        if (has_errors(context)) {
-            return result;
-        }
 
         if (for_node->next != NULL) {
-            EvalResult next_result = execute_expr(context, for_node->next);
-            append_error(context, get_signal_error(next_result.sig));
-            if (has_errors(context)) {
+            EvalResult next_result = execute_expr(ctx, for_node->next);
+            append_error(ctx, get_signal_error(next_result.sig));
+            if (has_errors(ctx)) {
                 return result;
             }
         }
@@ -313,30 +635,30 @@ EvalResult execute_loop_stmt(Context *context, AST_Node *node) {
     return result;
 }
 
-void unwrap_index_expr(Context *context, AST_Node *node, Value *arr, Value* index) {
+void unwrap_index_expr(Context *ctx, AST_Node *node, Value *arr, Value* index) {
     assert(node->kind == AST_INDEX);
 
     AST_NodeIndex *index_node = (void*)node;
 
-    EvalResult arr_res = execute_expr(context, index_node->node);
-    append_error(context, get_signal_error(arr_res.sig));
-    if (has_errors(context)) {
+    EvalResult arr_res = execute_expr(ctx, index_node->node);
+    append_error(ctx, get_signal_error(arr_res.sig));
+    if (has_errors(ctx)) {
         return;
     }
 
-    if (arr_res.val.type->tag != TYPE_STR && arr_res.val.type->tag != TYPE_ARRAY) {
-        append_error(context, ERROR_INCOMPATIBLE_TYPES);
+    if (arr_res.val.type != STR_TYPE && arr_res.val.type->kind != TYPE_ARRAY) {
+        append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
         return;
     }
     
-    EvalResult index_res = execute_expr(context, index_node->index);
-    append_error(context, get_signal_error(index_res.sig));
-    if (has_errors(context)) {
+    EvalResult index_res = execute_expr(ctx, index_node->index);
+    append_error(ctx, get_signal_error(index_res.sig));
+    if (has_errors(ctx)) {
         return;
     }
 
-    if (index_res.val.type->tag != TYPE_INT) {
-        append_error(context, ERROR_INCOMPATIBLE_TYPES);
+    if (index_res.val.type != INT_TYPE) {
+        append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
         return;
     }
 
@@ -344,18 +666,27 @@ void unwrap_index_expr(Context *context, AST_Node *node, Value *arr, Value* inde
     *index = index_res.val;
 }
 
-void assign_var(Context *context, AST_NodeName *name_node, Value val) {
+// TODO: Implement copying
+
+Value copy_value(Context *ctx, Value val) {
+    Value copy = create_value(val.type);
+    //copy.as_ptr = alloc_type_value_from_value(ctx, val.type);
+
+    
+}
+
+void assign_var(Context *ctx, AST_NodeName *name_node, Value val) {
     String_View name_sv = name_node->name;
 
     Var *var = NULL;
-    if (resolve_name_sv(context, &name_sv, &var)) {
+    if (resolve_name_sv(ctx, name_sv, &var)) {
         if (var->constant) {
-            append_error(context, ERROR_CANNOT_REASSIGN_CONST);
+            append_error(ctx, ERROR_CANNOT_REASSIGN_CONST);
             return;
         }
     }
     else {
-        append_error(context, ERROR_NOT_DEFINED);
+        append_error(ctx, ERROR_NOT_DEFINED);
         return;
     }
 
@@ -365,48 +696,72 @@ void assign_var(Context *context, AST_NodeName *name_node, Value val) {
     var->val = val;
 }
 
-void assign_arr(Context *context, AST_NodeIndex *index_node, Value val) {
+void assign_arr_el(Context *ctx, AST_NodeIndex *index_node, Value val) {
     Value arr_val;
     Value index;
-    unwrap_index_expr(context, (void*)index_node, &arr_val, &index);
+    unwrap_index_expr(ctx, (void*)index_node, &arr_val, &index);
     
-    switch (arr_val.type->tag) {
-        case TYPE_ARRAY: {
-            Array *arr = arr_val.as_ptr;
-            arr->els.items[index.as_int] = val;
-        } break;
-
-        case TYPE_STR: {
-            if (val.type->tag != TYPE_CHAR) {
-                append_error(context, ERROR_INCOMPATIBLE_TYPES);
+    switch (arr_val.type->kind) {
+        case TYPE_PRIMITIVE: {
+            if (arr_val.type == STR_TYPE) {
+                if (val.type != CHAR_TYPE) {
+                    append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                    return;
+                }
+            
+                String_Builder *str = arr_val.as_ptr;
+                str->items[index.as_int] = val.as_int;
                 return;
             }
-            
-            String_Builder *str = arr_val.as_ptr;
-            str->items[index.as_int] = val.as_int;
+
+            append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+        }
+        
+        case TYPE_ARRAY: {
+            Array *arr = arr_val.as_ptr;
+            arr->items[index.as_int] = val;
         } break;
             
-        default: append_error(context, ERROR_INCOMPATIBLE_TYPES);
+        default: append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
     }
 }
 
-void assign(Context *context, AST_Node *node, Value val) {
+void assign_member(Context *ctx, AST_NodeMemberAccess *member_access_node, Value val) {
+    Value base;
+    Member member = get_member_from_node(ctx, (void*)member_access_node, &base);
+    if (has_errors(ctx)){
+        return;
+    }
+    
+    if (member.kind != MEMBER_FIELD) {
+        append_error(ctx, ERROR_CANNOT_REASSIGN_CONST);
+        return;
+    }
+    
+    assign_field(ctx, base.as_ptr, member, val);
+}
+
+void assign(Context *ctx, AST_Node *node, Value val) {
     switch (node->kind) {
         case AST_NAME: {
-            assign_var(context, (void*)node, val);
+            assign_var(ctx, (void*)node, val);
         } break;
 
         case AST_INDEX: {
-            assign_arr(context, (void*)node, val);
+            assign_arr_el(ctx, (void*)node, val);
+        } break;
+
+        case AST_MEMBER_ACCESS: {
+            assign_member(ctx, (void*)node, val);
         } break;
             
         default: {
-            append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
+            append_error(ctx, ERROR_CANNOT_ASSIGN_TO_CONST);
         }
     }
 }
 
-Value execute_binop(Context *context, AST_Node *node) {
+Value execute_binop(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_BINOP);
     Value val = create_value(VOID_TYPE);
 
@@ -414,19 +769,19 @@ Value execute_binop(Context *context, AST_Node *node) {
 
     EvalResult lhs = create_result(VOID_TYPE);
     if (!is_assignment(node)) {
-        lhs = execute_expr(context, binop->lhs);
+        lhs = execute_expr(ctx, binop->lhs);
         if (lhs.sig != SIGNAL_NONE) {
-            append_error(context, get_signal_error_unexpected(lhs.sig));
+            append_error(ctx, get_signal_error_unexpected(lhs.sig));
         }
         
-        if (has_errors(context)) {
+        if (has_errors(ctx)) {
             return val;
         }
     }
 
     if (binop->op == BINOP_LOGIC_AND) {
-        bool lhs_bool = to_bool(context, lhs.val);
-        if (has_errors(context)) {
+        bool lhs_bool = to_bool(ctx, lhs.val);
+        if (has_errors(ctx)) {
             return val;
         }
 
@@ -437,87 +792,87 @@ Value execute_binop(Context *context, AST_Node *node) {
         }
     }
     
-    EvalResult rhs = execute_expr(context, binop->rhs);
+    EvalResult rhs = execute_expr(ctx, binop->rhs);
     if (rhs.sig != SIGNAL_NONE) {
-        append_error(context, get_signal_error_unexpected(rhs.sig));
+        append_error(ctx, get_signal_error_unexpected(rhs.sig));
     }
     
-    if (has_errors(context)) {
+    if (has_errors(ctx)) {
         return val;
     }
     
     switch (binop->op) {
         case BINOP_PLUS: {
-            val = binary_plus(context, lhs.val, rhs.val);
+            val = binary_plus(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_MINUS: {
-            val = binary_minus(context, lhs.val, rhs.val);
+            val = binary_minus(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_MUL: {
-            val = binary_mul(context, lhs.val, rhs.val);
+            val = binary_mul(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_DIV: {
-            val = binary_div(context, lhs.val, rhs.val);
+            val = binary_div(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_MOD: {
-            val = binary_mod(context, lhs.val, rhs.val);
+            val = binary_mod(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_POW: {
-            val = binary_pow(context, lhs.val, rhs.val);
+            val = binary_pow(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_LOGIC_AND: {
-            val = binary_logic_and(context, lhs.val, rhs.val);
+            val = binary_logic_and(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_BIT_AND: {
-            val = binary_bitwise_and(context, lhs.val, rhs.val);
+            val = binary_bitwise_and(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_LOGIC_OR: {
-            val = binary_logic_or(context, lhs.val, rhs.val);
+            val = binary_logic_or(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_BIT_OR: {
-            val = binary_bitwise_or(context, lhs.val, rhs.val);
+            val = binary_bitwise_or(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_GT: {
-            val = binary_gt(context, lhs.val, rhs.val);
+            val = binary_gt(ctx, lhs.val, rhs.val);
         } break;
             
         case BINOP_LT: {
-            val = binary_lt(context, lhs.val, rhs.val);
+            val = binary_lt(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_GTEQ: {
-            val = binary_gteq(context, lhs.val, rhs.val);
+            val = binary_gteq(ctx, lhs.val, rhs.val);
         } break;
             
         case BINOP_LTEQ: {
-            val = binary_lteq(context, lhs.val, rhs.val);
+            val = binary_lteq(ctx, lhs.val, rhs.val);
         } break;
             
         case BINOP_EQ: {
-            val = binary_eq(context, lhs.val, rhs.val);
+            val = binary_eq(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_NEQ: {
-            val = binary_neq(context, lhs.val, rhs.val);
+            val = binary_neq(ctx, lhs.val, rhs.val);
         } break;
 
         case BINOP_ASSIGN: {
             if (!is_assignable(binop->lhs)) {
-                append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
+                append_error(ctx, ERROR_CANNOT_ASSIGN_TO_CONST);
                 return val;
             }
             
-            assign(context, (void*)binop->lhs, rhs.val);
+            assign(ctx, (void*)binop->lhs, rhs.val);
         } break;
             
         default: break;
@@ -526,54 +881,54 @@ Value execute_binop(Context *context, AST_Node *node) {
     return val;
 }
 
-Value execute_unop(Context *context, AST_Node *node) {
+Value execute_unop(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_UNOP);
     Value val = create_value(VOID_TYPE);
 
     AST_NodeUnOp *unop = (void*)node;
     
-    EvalResult result = execute_expr(context, unop->expr);
+    EvalResult result = execute_expr(ctx, unop->expr);
     if (result.sig != SIGNAL_NONE) {
-        append_error(context, get_signal_error_unexpected(result.sig));
+        append_error(ctx, get_signal_error_unexpected(result.sig));
     }
 
-    if (has_errors(context)) {
+    if (has_errors(ctx)) {
         return val;
     }
     
     switch (unop->op) {
         case UNOP_INCREMENT: {
             if (!is_assignable(unop->expr)) {
-                append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
+                append_error(ctx, ERROR_CANNOT_ASSIGN_TO_CONST);
                 return val;
             }
             
-            val = unary_increment(context, result.val);
+            val = unary_increment(ctx, result.val);
             
-            assign(context, (void*)unop->expr, val);
+            assign(ctx, (void*)unop->expr, val);
             return val;
         }
         case UNOP_DECREMENT: {
             if (!is_assignable(unop->expr)) {
-                append_error(context, ERROR_CANNOT_ASSIGN_TO_CONST);
+                append_error(ctx, ERROR_CANNOT_ASSIGN_TO_CONST);
                 return val;
             }
             
-            val = unary_decrement(context, result.val);
+            val = unary_decrement(ctx, result.val);
             
-            assign(context, (void*)unop->expr, val);
+            assign(ctx, (void*)unop->expr, val);
             return val;
         }
         case UNOP_NOT: {
-            val = unary_not(context, result.val);
+            val = unary_not(ctx, result.val);
             return val;
         }
         case UNOP_PLUS: {
-            val = unary_plus(context, result.val);
+            val = unary_plus(ctx, result.val);
             return val;
         }
         case UNOP_MINUS: {
-            val = unary_minus(context, result.val);
+            val = unary_minus(ctx, result.val);
             return val;
         }
         default: break;
@@ -582,109 +937,121 @@ Value execute_unop(Context *context, AST_Node *node) {
     assert(0 && "UNREACHABLE");
 }
 
-Value execute_call_expr(Context *context, AST_Node *node) {
+Value execute_call_expr(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_CALL);
 
     Value value = create_value(VOID_TYPE);
     
     AST_NodeCall *call = (AST_NodeCall*)node;
-    Func *func = NULL;
-    if (!resolve_func(context, node, &func)) {
-        append_error(context, ERROR_NOT_DEFINED);
+
+    EvalResult func = execute(ctx, call->to_call);
+    if (has_errors(ctx)) {
         return value;
     }
 
-    return exec_func(context, func, call->args);
+    if (func.val.type->kind != TYPE_FUNC) {
+        append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+    }
+    
+    return exec_func(ctx, func.val.as_ptr, call->args);
 }
 
-Value execute_index_expr(Context *context, AST_Node *node) {
+// TODO: Force types to implement index operation (Implement traits and operator overloading)
+
+Value execute_index_expr(Context *ctx, AST_Node *node) {
     Value value = create_value(VOID_TYPE);
     
     Value arr;
     Value index;
-    unwrap_index_expr(context, node, &arr, &index);
-    if (has_errors(context)) {
+    unwrap_index_expr(ctx, node, &arr, &index);
+    if (has_errors(ctx)) {
         return value;
     }
     
-    switch (arr.type->tag) {
+    switch (arr.type->kind) {
+        case TYPE_PRIMITIVE: {
+            if (arr.type == STR_TYPE) {
+                String_Builder *str = arr.as_ptr;
+                value = create_value(CHAR_TYPE);
+
+                if (index.as_int < 0 || index.as_int >= str->count) {
+                    append_error(ctx, ERROR_INDEX_OUT_OF_BOUNDS);
+                    return value;
+                }
+            
+                value.as_int = str->items[index.as_int];
+                return value;
+            }
+            
+            append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+        }
+        
         case TYPE_ARRAY: {
             Array *array = arr.as_ptr;
             value = create_value(array->el_type);
 
-            if (index.as_int < 0 || index.as_int >= array->els.count) {
-                append_error(context, ERROR_INDEX_OUT_OF_BOUNDS);
+            if (index.as_int < 0 || index.as_int >= array->count) {
+                append_error(ctx, ERROR_INDEX_OUT_OF_BOUNDS);
                 return value;
             }
             
-            value = array->els.items[index.as_int];
+            value = array->items[index.as_int];
             return value;
         }
 
-        case TYPE_STR: {
-            String_Builder *str = arr.as_ptr;
-            value = create_value(CHAR_TYPE);
-
-            if (index.as_int < 0 || index.as_int >= str->count) {
-                append_error(context, ERROR_INDEX_OUT_OF_BOUNDS);
-                return value;
-            }
-            
-            value.as_int = str->items[index.as_int];
+        default: {
+            append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
             return value;
         }
-
-        default: assert(0 && "UNREACHABLE");
     }
 }
 
-Value execute_arr_expr(Context *context, AST_Node *node) {
+Value execute_arr_expr(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_ARR);
     
     AST_NodeArray *arr_node = (void*)node;
     
     // TODO: Type inference
     Value val = create_value(ARRAY_ANY_TYPE);
-    Array *arr = alloc_arr(ANY_TYPE);
-    da_reserve(&arr->els, arr_node->nodes.count);
+    Array *arr = alloc_type_value(ctx, VARIADIC_TYPE);
+    da_reserve(arr, arr_node->nodes.count);
 
     for (size_t i = 0; i < arr_node->nodes.count; ++i) {
-        EvalResult el = execute_expr(context, arr_node->nodes.items[i]);
-        append_error(context, get_signal_error(el.sig));
-        if (has_errors(context)) {
-            da_free(arr->els);
+        EvalResult el = execute_expr(ctx, arr_node->nodes.items[i]);
+        append_error(ctx, get_signal_error(el.sig));
+        if (has_errors(ctx)) {
+            da_pfree(arr);
             free(arr);
             return val;
         }
         
-        da_append(&arr->els, el.val);
+        da_append(arr, el.val);
     }
 
     val.as_ptr = arr;
     return val;
 }
 
-EvalResult execute_block_expr(Context *context, AST_Node *node) {
+EvalResult execute_block_expr(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_BLOCK);
     AST_NodeBlock *block = (void*)node;
 
     Context local_context = {
-        .global = context->global,
+        .global = ctx->global,
         .scope = (Scope){
-            .vars = hm_copy(context->scope.vars),
-            .funcs = hm_copy(context->scope.funcs),
+            .symbols = hm_copy(ctx->scope.symbols),
         },
-        .errors = context->errors, 
+        .errors = ctx->errors,
+        .type_cache = ctx->type_cache,
     };
     
     EvalResult result = execute_nodes(&local_context, &block->nodes);
     if (result.sig != SIGNAL_NONE) {
-        hm_free(local_context.scope.vars);
-        hm_free(local_context.scope.funcs);
+        hm_free(local_context.scope.symbols);
         return result;
     }
     
-    if (has_errors(context)) {
+    if (has_errors(ctx)) {
         return result;
     }
     
@@ -692,12 +1059,11 @@ EvalResult execute_block_expr(Context *context, AST_Node *node) {
         result = execute(&local_context, block->ret_expr);
     }
     
-    hm_free(local_context.scope.vars);
-    hm_free(local_context.scope.funcs);
+    hm_free(local_context.scope.symbols);
     return result;
 }
 
-EvalResult execute_if_expr(Context *context, AST_Node *node, bool *executed_ret) {
+EvalResult execute_if_expr(Context *ctx, AST_Node *node, bool *executed_ret) {
     assert(node->kind == AST_IF);
 
     bool executed = false;
@@ -705,19 +1071,19 @@ EvalResult execute_if_expr(Context *context, AST_Node *node, bool *executed_ret)
     AST_NodeBranch *if_node = (void*)node;
     EvalResult result = create_result(VOID_TYPE);
 
-    EvalResult condition = execute_expr(context, if_node->condition);
-    append_error(context, get_signal_error(result.sig));
-    if (has_errors(context)) {
+    EvalResult condition = execute_expr(ctx, if_node->condition);
+    append_error(ctx, get_signal_error(result.sig));
+    if (has_errors(ctx)) {
         return result;
     }
     
-    bool condition_value = to_bool(context, condition.val);
-    if (has_errors(context)) {
+    bool condition_value = to_bool(ctx, condition.val);
+    if (has_errors(ctx)) {
         return result;
     }
     
     if (condition_value) {
-        result = execute(context, if_node->body);
+        result = execute(ctx, if_node->body);
         executed = true;
         if (executed_ret != NULL) {
             *executed_ret = executed;
@@ -727,7 +1093,7 @@ EvalResult execute_if_expr(Context *context, AST_Node *node, bool *executed_ret)
     }
 
     for (size_t i = 0; i < if_node->elif_branches.count; ++i) {
-        result = execute_if_expr(context, if_node->elif_branches.items[i], &executed);
+        result = execute_if_expr(ctx, if_node->elif_branches.items[i], &executed);
         if (executed_ret != NULL) {
             *executed_ret = executed;
         }
@@ -738,7 +1104,7 @@ EvalResult execute_if_expr(Context *context, AST_Node *node, bool *executed_ret)
     }
 
     if (if_node->else_branch != NULL) {
-        result = execute(context, if_node->else_branch);
+        result = execute(ctx, if_node->else_branch);
         executed = true;
         if (executed_ret != NULL) {
             *executed_ret = executed;
@@ -748,16 +1114,208 @@ EvalResult execute_if_expr(Context *context, AST_Node *node, bool *executed_ret)
     return result;
 }
 
-Value execute_name_expr(Context *context, AST_Node *expr) {
+EvalResult execute_struct_expr(Context *ctx, AST_Node *node) {
+    assert(node->kind == AST_STRUCT && "Unexpected node");
+    
+    EvalResult result = create_result(VOID_TYPE);
+
+    AST_NodeInit *struct_node = (void*)node;
+    
+    Symbol *type_symb = NULL;
+    
+    if (struct_node->node->kind == AST_NAME) {
+        AST_NodeName *name_node = (void*)struct_node->node;
+        
+        if (!resolve_symb(ctx, name_node->name, &type_symb) || type_symb == NULL) {
+            append_error(ctx, ERROR_UNKNOWN_TYPE);
+        }
+
+        if (has_errors(ctx)) {
+            return result;
+        }
+    }
+    else if (struct_node->node->kind == AST_TYPE) {
+        AST_Type *name_node = (void*)struct_node->node;
+        
+        if (!resolve_symb(ctx, name_node->name, &type_symb)) {
+            append_error(ctx, ERROR_UNKNOWN_TYPE);
+        }
+        
+        if (has_errors(ctx)) {
+            return result;
+        }
+    }
+    else {
+        append_error(ctx, ERROR_UNKNOWN_TYPE);
+        return result;
+    }
+
+    Type *type = NULL;
+    
+    switch (type_symb->symb_kind) {
+        case SYMB_VAR: {
+            type = ((Var*)type_symb)->val.type;
+        } break;
+            
+        case SYMB_TYPE: {
+            type = (Type*)type_symb;
+        } break;
+
+        default: {
+            append_error(ctx, ERROR_UNKNOWN_TYPE);
+            return result;
+        }
+    }
+    
+    result.val = create_value(type);
+    result.val.as_ptr = alloc_type_value(ctx, type);
+
+    for (size_t i = 0; i < type->members.count; ++i) {
+        Member member = type->members.items[i];
+        if (member.kind != MEMBER_FIELD) {
+            continue;
+        }
+        
+        AST_Node *initializer = NULL;
+
+        for (size_t j = 0; j < struct_node->initializers.count; ++j) {
+            AST_Initializer ast_initializer = struct_node->initializers.items[j];
+
+            if (!ast_initializer.has_name) {
+                if (i == j) {
+                    if (initializer != NULL) {
+                        append_error(ctx, ERROR_MULTIPLE_INITIALIZERS);
+                        free(result.val.as_ptr);
+                        return result;
+                    }
+                    
+                    initializer = ast_initializer.initializer;
+                }
+                
+                continue;
+            }
+            
+            if (sv_cmp_sb(&ast_initializer.name, member.name)) {
+                if (initializer != NULL) {
+                    append_error(ctx, ERROR_MULTIPLE_INITIALIZERS);
+                    free(result.val.as_ptr);
+                    return result;
+                }
+                
+                initializer = ast_initializer.initializer;
+            }
+        }
+
+        if (initializer == NULL) {
+            initializer = member.field.initializer;
+        }
+
+        if (initializer == NULL) {
+            continue;
+        }
+
+        EvalResult initializer_res = execute_expr(ctx, initializer);
+        append_error(ctx, get_signal_error_unexpected(initializer_res.sig));
+        if (has_errors(ctx)) {
+            return result;
+        }
+            
+        assign_field(ctx, result.val.as_ptr, member, initializer_res.val);
+        if (has_errors(ctx)) {
+            return result;
+        }
+    }
+    
+    return result;
+}
+
+Member get_member_from_node(Context *ctx, AST_Node *node, Value *base) {
+    Member member = (Member){0};
+    
+    assert(node->kind == AST_MEMBER_ACCESS);
+    AST_NodeMemberAccess *member_access_node = (void*)node;
+
+    assert(member_access_node->member->kind == AST_NAME);
+    AST_NodeName *member_name_node = (void*)member_access_node->member;
+
+    EvalResult base_result = execute_expr(ctx, member_access_node->base);
+    append_error(ctx, get_signal_error_unexpected(base_result.sig));
+
+    if (has_errors(ctx)) {
+        return member;
+    }
+
+    Type *type = base_result.val.type->kind == TYPE_TYPE? base_result.val.type->el_type : base_result.val.type;
+    if (!get_member(type, &member_name_node->name, &member)) {
+        append_error(ctx, ERROR_UNKNOWN_FIELD);
+        return member;
+    }
+
+    *base = base_result.val;
+    return member;
+}
+
+EvalResult execute_member_access_expr(Context *ctx, AST_Node *node) {
+    assert(node->kind == AST_MEMBER_ACCESS);
+
+    EvalResult base_result = create_result(VOID_TYPE);
+    
+    Value base;
+    Member member = get_member_from_node(ctx, node, &base);
+    if (has_errors(ctx)) {
+        return base_result;
+    }
+
+    base_result.val = base;
+    
+    if (base_result.val.type->kind == TYPE_TYPE) {
+        if (!member.is_static) {
+            append_error(ctx, ERROR_UNKNOWN_FIELD);
+            return base_result;
+        }
+        
+        base_result.val = get_static_member_val(member);
+    }
+    else {
+        base_result.val = get_member_val(ctx, base_result.val.as_ptr, member);
+    }
+
+    return base_result;
+}
+
+Value execute_name_expr(Context *ctx, AST_Node *expr) {
+    AST_NodeName *name_node = (void*)expr;
+    
     Value val = create_value(VOID_TYPE);
     
-    Var *var = NULL;
-    if (!resolve_name_node(context, expr, &var) || var == NULL) {
-        append_error(context, ERROR_NOT_DEFINED);
+    Symbol *symb = NULL;
+    if (!resolve_symb(ctx, name_node->name, &symb) || symb == NULL) {
+        append_error(ctx, ERROR_NOT_DEFINED);
         return val;
     }
+
+    switch (symb->symb_kind) {
+        case SYMB_VAR: {
+            Var *var = (void*)symb;
+            val = var->val;
+        } break;
+
+        case SYMB_FUNC: {
+            Func *func = (void*)symb;
+            val.type = func->type;
+            val.as_ptr = func;
+        } break;
+
+        case SYMB_TYPE: {
+            Type *type = (void*)symb;
+            val.type = alloc_type_type(ctx, type);
+            val.as_ptr = type;
+        } break;
             
-    val = var->val;
+        default: assert(0 && "UNREACHABLE");
+    }
+    
+    
     return val;
 }
 
@@ -773,14 +1331,14 @@ EvalResult create_break_signal() {
     return result;
 }
 
-EvalResult create_return_signal(Context *context, AST_Node *node) {
+EvalResult create_return_signal(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_RETURN);
 
     AST_NodeReturn *ret_node = (void*)node;
 
     EvalResult result = create_result(VOID_TYPE);
     if (ret_node->node != NULL) {
-        result = execute_expr(context, ret_node->node);
+        result = execute_expr(ctx, ret_node->node);
     }
     
     result.sig = SIGNAL_RETURN;
@@ -788,44 +1346,90 @@ EvalResult create_return_signal(Context *context, AST_Node *node) {
     return result;
 }
 
-EvalResult execute_expr(Context *context, AST_Node *expr) {
+EvalResult execute_lit_expr(Context *ctx, AST_Node *expr) {
+    assert(expr->kind == AST_LIT);
+
+    AST_NodeLit *lit_node = (void*)expr;
+    EvalResult result = create_result(VOID_TYPE);
+    
+    switch (lit_node->val.type) {
+        case AST_TYPE_INT: {
+            result.val.type = INT_TYPE;
+            parse_int_sv(lit_node->val.view, &result.val.as_int);
+        } break;
+
+        case AST_TYPE_FLOAT: {
+            result.val.type = FLOAT_TYPE;
+            parse_float_sv(lit_node->val.view, &result.val.as_float);
+        } break;
+
+        case AST_TYPE_BOOL: {
+            result.val.type = BOOL_TYPE;
+            result.val.as_int = lit_node->val.as_bool;
+        } break;
+
+        case AST_TYPE_CHAR: {
+            result.val.type = CHAR_TYPE;
+            result.val.as_int = lit_node->val.as_char;
+        } break;
+
+        case AST_TYPE_STR: {
+            result.val.type = STR_TYPE;
+            String_Builder *sb = sb_alloc();
+            sv_to_escaped_sb(sb, &lit_node->val.view);
+            result.val.as_ptr = sb;
+        } break;
+    }
+
+    return result;
+}
+
+EvalResult execute_expr(Context *ctx, AST_Node *expr) {
     EvalResult result = create_result(VOID_TYPE);
 
     switch (expr->kind) {
         case AST_BINOP: {
-            result.val = execute_binop(context, expr);
+            result.val = execute_binop(ctx, expr);
         } break;
 
         case AST_UNOP: {
-            result.val = execute_unop(context, expr);
+            result.val = execute_unop(ctx, expr);
         } break;
         
         case AST_LIT: {
-            result.val = ((AST_NodeLit*)expr)->val;
+            result = execute_lit_expr(ctx, expr);
         } break;
 
         case AST_ARR: {
-            result.val = execute_arr_expr(context, expr);
+            result.val = execute_arr_expr(ctx, expr);
         } break;
 
         case AST_NAME: {
-            result.val = execute_name_expr(context, expr);
+            result.val = execute_name_expr(ctx, expr);
         } break;
 
         case AST_CALL: {
-            result.val = execute_call_expr(context, expr);
+            result.val = execute_call_expr(ctx, expr);
         } break;
 
         case AST_INDEX: {
-            result.val = execute_index_expr(context, expr);
+            result.val = execute_index_expr(ctx, expr);
         } break;
 
         case AST_BLOCK: {
-            result = execute_block_expr(context, expr);
+            result = execute_block_expr(ctx, expr);
         } break;
 
         case AST_IF: {
-            result = execute_if_expr(context, expr, NULL);
+            result = execute_if_expr(ctx, expr, NULL);
+        } break;
+
+        case AST_STRUCT: {
+            result = execute_struct_expr(ctx, expr);
+        } break;
+
+        case AST_MEMBER_ACCESS: {
+            result = execute_member_access_expr(ctx, expr);
         } break;
 
         case AST_CONTINUE: {
@@ -837,11 +1441,7 @@ EvalResult execute_expr(Context *context, AST_Node *expr) {
         } break;
 
         case AST_RETURN: {
-            result = create_return_signal(context, expr);
-        } break;
-            
-        case AST_ERROR: {
-            append_error(context, ((AST_NodeError*)expr)->err);
+            result = create_return_signal(ctx, expr);
         } break;
 
         default: assert(0 && "UNREACHABLE");
@@ -850,50 +1450,51 @@ EvalResult execute_expr(Context *context, AST_Node *expr) {
     return result;
 }
 
-EvalResult execute(Context *context, AST_Node *node) {
+EvalResult execute(Context *ctx, AST_Node *node) {
     EvalResult result = create_result(VOID_TYPE);
     
     switch (node->kind) {
-        case AST_FN: {
-            register_func(context, node);
+        case AST_FUNC_DECL: {
+            register_func(ctx, node);
+        } break;
+
+        case AST_STRUCT_DECL: {
+            register_struct(ctx, node);
         } break;
 
         case AST_LET: {
-            register_var(context, node);
+            register_var(ctx, node);
         } break;
         
         case AST_FOR: {
-            result = execute_loop_stmt(context, node);
+            result = execute_loop_stmt(ctx, node);
         } break;
             
         default: {
-            result = execute_expr(context, node);
+            result = execute_expr(ctx, node);
         }
     }
     
     return result;
 }
 
-EvalResult execute_nodes(Context *context, Nodes *nodes) {
+// TODO: Implement time-dependent declarations
+
+EvalResult execute_nodes(Context *ctx, AST_Nodes *nodes) {
     EvalResult result = create_result(VOID_TYPE);
     
     for (size_t i = 0; i < nodes->count; ++i) {
         AST_Node *node = nodes->items[i];
-        if (node->kind != AST_FN) {
-            if (node->kind == AST_ERROR) {
-                append_error(context, ((AST_NodeError*)node)->err);
-                return result;
-            }
-            
+        if (node->kind != AST_FUNC_DECL && node->kind != AST_STRUCT_DECL) {
             continue;
         }
 
-        result = execute(context, node);
+        result = execute(ctx, node);
         if (result.sig != SIGNAL_NONE) {
             return result;
         }
         
-        if (has_errors(context)) {
+        if (has_errors(ctx)) {
             return result;
         }
     }
@@ -901,21 +1502,16 @@ EvalResult execute_nodes(Context *context, Nodes *nodes) {
     for (size_t i = 0; i < nodes->count; ++i) {
         AST_Node *node = nodes->items[i];
         
-        if (node->kind == AST_FN) {
+        if (node->kind == AST_FUNC_DECL || node->kind == AST_STRUCT_DECL) {
             continue;
         }
         
-        if (node->kind == AST_ERROR) {
-            append_error(context, ((AST_NodeError*)node)->err);
-            return result;
-        }
-        
-        result = execute(context, node);
+        result = execute(ctx, node);
         if (result.sig != SIGNAL_NONE) {
             return result;
         }
         
-        if (has_errors(context)) {
+        if (has_errors(ctx)) {
             return result;
         }
     }
@@ -924,9 +1520,9 @@ EvalResult execute_nodes(Context *context, Nodes *nodes) {
 }
 
 // TODO: Implement global context
-void execute_program(Context *context, AST_NodeProgram *program) {
-    EvalResult result = execute_nodes(context, &program->nodes);
+void execute_program(Context *ctx, AST_NodeProgram *program) {
+    EvalResult result = execute_nodes(ctx, &program->nodes);
     ast_free((void*)program);
 
-    append_error(context, get_signal_error(result.sig));
+    append_error(ctx, get_signal_error(result.sig));
 }
