@@ -1,4 +1,4 @@
-# TODO: Implement visibility identifiers and make sure 'const' works
+# TODO: Implement visibility identifiers
 # TODO: Implement 'self' keyword
 
 struct Vec {
@@ -12,15 +12,34 @@ struct Vec {
     }
     ~#
     
-    const func dist(vec_1: Vec, vec_2: Vec) : float {
-        return sqrt((vec_1.x - vec_2.x)^2 + (vec_1.y - vec_2.y)^2 + (vec_1.z - vec_2.z)^2)
-    }
-    
-    const func sqrt(x: float) : float {
-        return x^(1/2)
+    static func dist(vec_1: Vec, vec_2: Vec) : float {
+        return ((vec_1.x - vec_2.x)^2 + (vec_1.y - vec_2.y)^2 + (vec_1.z - vec_2.z)^2)^(1/2)
     }
 }
 
 let vec = @Vec{0, y: 1, 67}
+let vec_copy = vec
+let vec_ref = &vec
 
-println("{}", vec.z)
+println("Start:")
+println("vec: {vec}")
+println("vec_ref: {vec_ref}")
+println("vec_copy: {vec_copy}\n")
+
+vec.x = 69;
+
+println("vec.x = 69:")
+println("vec: {vec}")
+println("vec_ref: {vec_ref}")
+println("vec_copy: {vec_copy}\n")
+
+vec_ref.z = 42
+vec_copy.y = -67
+
+println("vec_ref.z = 42, vec_copy.y = -67:")
+println("vec: {vec}")
+println("vec_ref: {vec_ref}")
+println("vec_copy: {vec_copy}\n")
+
+println("dist(vec_ref, vec_copy): {Vec.dist(vec_ref, vec_copy)}")
+readkey()

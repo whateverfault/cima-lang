@@ -102,6 +102,10 @@ void print_runtime_error(RuntimeError err) {
             printf("Cannot reassign constant.\n");
         } break;
 
+        case ERROR_CANNOT_TAKE_REF_TO_CONST: {
+            printf("Cannot take reference to constant.\n");
+        } break;
+
         case ERROR_TOO_FEW_ARGS: {
             printf("Too few arguments.\n");
         } break;
@@ -209,6 +213,11 @@ int main(int argc, char **argv) {
     
     execute_program(&ctx, program);
 
+    if (ctx.errors->count > 0) {
+        printf("\x1b[2J\x1b[3J\x1b[H");
+        fflush(stdout);
+    }
+    
     for (size_t i = 0; i < ctx.errors->count; ++i) {
         print_runtime_error(ctx.errors->items[i]);
     }

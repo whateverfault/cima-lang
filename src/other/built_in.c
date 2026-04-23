@@ -3,37 +3,6 @@
 #include "executor/funcs/funcs.h"
 #include "executor/types/type.h"
 
-static String_Builder pi_sb = CSTR_TO_SB("pi");
-static String_Builder e_sb = CSTR_TO_SB("e");
-static String_Builder nan_sb = CSTR_TO_SB("nan");
-
-Var builtin_vars[builtin_vars_count] = {
-    (Var){
-        .name = &pi_sb,
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = M_PI,
-        },
-        .constant = true,
-    },
-    (Var){
-        .name = &e_sb,
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = M_E,
-        },
-        .constant = true,
-    },
-    (Var){
-        .name = &nan_sb,
-        .val = (Value){
-            .type = FLOAT_TYPE,
-            .as_float = NAN,
-        },
-        .constant = true,
-    },
-};
-
 static String_Builder msg_sb = CSTR_TO_SB("msg");
 static String_Builder args_sb = CSTR_TO_SB("args");
 static String_Builder string_sb = CSTR_TO_SB("string");

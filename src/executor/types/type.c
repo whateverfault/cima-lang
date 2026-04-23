@@ -1,6 +1,3 @@
-#ifndef OPERATIONS_H
-#define OPERATIONS_H
-
 #include "type.h"
 
 #include <math.h>
@@ -22,7 +19,6 @@ const Type int_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = sizeof(INT_CTYPE),
-    .alignment = ALIGNOF(INT_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -32,7 +28,6 @@ const Type float_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = sizeof(FLOAT_CTYPE),
-    .alignment = ALIGNOF(FLOAT_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -42,7 +37,6 @@ const Type bool_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = sizeof(BOOL_CTYPE),
-    .alignment = ALIGNOF(BOOL_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -52,7 +46,6 @@ const Type char_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = sizeof(CHAR_CTYPE),
-    .alignment = ALIGNOF(CHAR_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -62,7 +55,6 @@ const Type str_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = sizeof(STR_CTYPE),
-    .alignment = ALIGNOF(STR_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -71,8 +63,7 @@ const Type any_symb = (Type){
     .name = &any_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(ANY_CTYPE),
-    .alignment = ALIGNOF(ANY_CTYPE),
+    .size = sizeof(PTR_CTYPE),
     .members = {0},
     .constant = true,
 };
@@ -82,7 +73,6 @@ const Type void_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
     .size = 0,
-    .alignment = 0,
     .members = {0},
     .constant = true,
 };
@@ -92,7 +82,6 @@ const Type variadic_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_ARRAY,
     .size = sizeof(Array),
-    .alignment = ALIGNOF(Array),
     .el_type = NULL,
     .members = {0},
     .constant = true,
@@ -103,7 +92,6 @@ const Type array_any_symb = (Type){
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_ARRAY,
     .size = sizeof(Array),
-    .alignment = ALIGNOF(Array),
     .el_type = ANY_TYPE,
     .members = {0},
     .constant = true,
@@ -113,7 +101,6 @@ const Type array_va_symb = (Type){
     .name = NULL,
     .symb_kind = SYMB_TYPE,
     .size = sizeof(Array),
-    .alignment = ALIGNOF(Array),
     .el_type = VARIADIC_TYPE,
     .members = {0},
     .constant = true,
@@ -123,16 +110,23 @@ const Type array_va_symb = (Type){
 #define FIELD_ADDR(struct_addr, offset) ((char*)struct_addr + offset)
 
 size_t hash_type(Type *t);
+size_t hash_member(Member *member) {
+    size_t h = 0;
+
+    h = hash_combine(h, member->kind);
+    h = hash_combine(h, hash_type(member->type));
+    if (member->name != NULL && member->name->count > 0) {
+        h = hash_combine(h, hash_nkey((unsigned char*)member->name->items, member->name->count));
+    }
+    
+    return h;
+}
+
 size_t hash_members(Members members) {
     size_t h = 0;
 
     for (size_t i = 0; i < members.count; ++i) {
-        Member member = members.items[i];
-        h = hash_combine(h, hash_type(member.type));
-        
-        if (member.name != NULL && member.name->count > 0) {
-            h = hash_combine(h, hash_nkey((unsigned char*)member.name->items, member.name->count));
-        }
+        h = hash_combine(h, hash_member(members.items[i]));
     }
 
     return h;
@@ -145,7 +139,7 @@ size_t hash_type(Type *t) {
     h = hash_combine(h, hash_members(t->members));
     
     if (t->el_type != NULL) {
-        h = hash_combine(h, (size_t)t->el_type);
+        h = hash_combine(h, hash_type(t->el_type));
     }
 
     return h;
@@ -158,7 +152,7 @@ size_t hash_patterns(Patterns patterns) {
         Pattern pattern = patterns.items[i];
         h = hash_combine(h, hash_type(pattern.type));
         
-        if (pattern.name->count > 0) {
+        if (pattern.name != NULL && pattern.name->count > 0) {
             h = hash_combine(h, hash_nkey((unsigned char*)pattern.name->items, pattern.name->count));
         }
     }
@@ -178,9 +172,9 @@ size_t hash_func(Func *f) {
     return h;
 }
 
-bool get_type_field(Type *type, String_View name, Member *field) {
+bool get_type_field(Type *type, String_View name, Member **field) {
     for (size_t i = 0; i < type->members.count; ++i) {
-        if (sv_cmp_sb(&name, type->members.items[i].name)) {
+        if (sv_cmp_sb(&name, type->members.items[i]->name)) {
             *field = type->members.items[i];
             return true;
         }
@@ -189,121 +183,50 @@ bool get_type_field(Type *type, String_View name, Member *field) {
     return false;
 }
 
-void store_value(void *dst, Type *type, Value val, Context *ctx) {
-    switch (type->kind) {
-        case TYPE_PRIMITIVE: {
-            if (IS_INTLIKE(type)) {
-                memcpy(dst, &val.as_int, sizeof(INT_CTYPE));
-            }
-            else if (type == FLOAT_TYPE) {
-                memcpy(dst, &val.as_float, sizeof(FLOAT_CTYPE));
-            }
-            else if (type == STR_TYPE || type == VOID_TYPE) {
-                memcpy(dst, &val.as_ptr, sizeof(void*));
-            }
-            else {
-                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
-            }
-        } break;
-
-        case TYPE_STRUCT:
-        case TYPE_ARRAY: {
-            memcpy(dst, &val.as_ptr, sizeof(void*));
-        } break;
-
-        default: append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+void alloc_type_value(Value *val, Type *type) {
+    val->type = type;
+    
+    if (type->kind == TYPE_ARRAY) {
+        val->as_ptr = alloc_array_value(type->el_type);
+    }
+    else if (type->kind == TYPE_STRUCT) {
+        val->as_struct = alloc_struct_value(type);
+    }
+    else if (type == STR_TYPE) {
+        val->as_ptr = calloc(1, sizeof(STR_CTYPE));
     }
 }
 
-void load_value(Value *out, void *src, Type *type, Context *ctx) {
-    out->type = type;
+Array *alloc_array_value(Type *el_type) {
+    Array *arr = calloc(1, sizeof(Array));
+    assert(arr != NULL && "Failed to allocate array");
+    arr->el_type = el_type;
 
-    switch (type->kind) {
-        case TYPE_PRIMITIVE: {
-            if (IS_INTLIKE(type)) {
-                memcpy(&out->as_int, src, sizeof(INT_CTYPE));
-            }
-            else if (type == FLOAT_TYPE) {
-                memcpy(&out->as_float, src, sizeof(FLOAT_CTYPE));
-            }
-            else if (type == BOOL_TYPE) {
-                BOOL_CTYPE tmp;
-                memcpy(&tmp, src, sizeof(tmp));
-                out->as_int = tmp;
-            }
-            else if (type == CHAR_TYPE) {
-                CHAR_CTYPE tmp;
-                memcpy(&tmp, src, sizeof(tmp));
-                out->as_int = tmp;
-            }
-            else if (type == STR_TYPE || type == VOID_TYPE) {
-                memcpy(&out->as_ptr, src, sizeof(void*));
-            }
-            else {
-                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
-            }
-        } break;
-
-        case TYPE_STRUCT:
-        case TYPE_ARRAY: {
-            memcpy(&out->as_ptr, src, sizeof(void*));
-        } break;
-
-        default: append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
-    }
+    return arr;
 }
 
-void *alloc_type_value(Context *ctx, Type *type) {
-    void *ptr = calloc(1, type->size);
-    assert(ptr != NULL && "Memory allocation failed");
+Struct alloc_struct_value(Type *type) {
+    Struct strct = {
+        .type = type,
+        .members = hm_alloc(),
+    };
 
     for (size_t i = 0; i < type->members.count; ++i) {
-        Member member = type->members.items[i];
-        if (member.kind != MEMBER_FIELD) {
-            continue;
-        }
-
-        if (member.type->kind == TYPE_STRUCT) {
-            Value val = create_value(member.type);
-            val.as_ptr = alloc_type_value(ctx, member.type);
-            
-            assign_field(ctx, ptr, member, val);
-        }
+        Member *member = type->members.items[i];
+        Value val = create_value(member->type);
+        alloc_type_value(&val, member->type);
+        hm_put_hashed(strct.members, hash_member(member), alloc_value(val));
     }
     
-    return ptr;
+    assert(strct.members != NULL && "Failed to allocate members");
+    return strct;
 }
 
-void *alloc_type_value_from_value(Context *ctx, Value value) {
-    void *ptr = calloc(1, value.type->size);
-    assert(ptr != NULL && "Memory allocation failed");
-
-    for (size_t i = 0; i < value.type->members.count; ++i) {
-        Member member = value.type->members.items[i];
-        if (member.kind != MEMBER_FIELD) {
-            continue;
-        }
-
-        Value val = create_value(member.type);
-
-        if (member.type->kind == TYPE_PRIMITIVE) {
-            val = value;
-        }
-        else if (member.type->kind == TYPE_STRUCT || member.type->kind == TYPE_ARRAY) {
-            val.as_ptr = alloc_type_value_from_value(ctx, value);
-        }
-        
-        assign_field(ctx, ptr, member, val);
-    }
-    
-    return ptr;
-}
-
-bool get_member(Type *type, String_View *name_sv, Member *member) {
+bool get_member(Type *type, String_View *name_sv, Member **member) {
     for (size_t i = 0; i < type->members.count; ++i) {
-        Member m = type->members.items[i];
+        Member *m = type->members.items[i];
 
-        if (m.name != NULL && sv_cmp_sb(name_sv, m.name)) {
+        if (m->name != NULL && sv_cmp_sb(name_sv, m->name)) {
             *member = m;
             return true;
         }
@@ -312,110 +235,161 @@ bool get_member(Type *type, String_View *name_sv, Member *member) {
     return false;
 }
 
-Value get_static_member_val(Member member) {
-    Value member_val = create_value(member.type);
+Value get_static_member_val(Member *member) {
+    Value member_val = create_value(member->type);
 
-    if (member.kind == MEMBER_METHOD) {
-        member_val.as_ptr = member.method.func;
-        member_val.type = member.method.func->type;
+    if (member->kind == MEMBER_METHOD) {
+        member_val.as_ptr = member->method.func;
+        member_val.type = member->method.func->type;
         return member_val;
     }
 
-    member_val = member.field.static_initializer;
+    member_val = *member->field.static_initializer;
     return member_val;
 }
 
-Value get_member_val(Context *ctx, void *struct_ptr, Member member) {
-    Value member_val = create_value(member.type);
+Value get_static_member_ref(Context *ctx, Member *member) {
+    Value member_ref = create_value(VOID_TYPE);
 
-    if (member.kind == MEMBER_METHOD) {
-        member_val.as_ptr = member.method.func;
-        member_val.type = member.method.func->type;
-        return member_val;
+    if (member->kind == MEMBER_METHOD) {
+        Value val = create_value(member->method.func->type);
+        val.as_ptr = member->method.func;
+        
+        member_ref.type = alloc_ref_type(ctx, member->method.func->type);
+        member_ref.as_ptr = alloc_value(val);
+        return member_ref;
     }
 
-    if (struct_ptr == NULL) {
-        append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
-        return member_val;
-    }
-
-    void *addr = FIELD_ADDR(struct_ptr, member.field.offset);
-    load_value(&member_val, addr, member.type, ctx);
-    return member_val;
+    member_ref.type = alloc_ref_type(ctx, member->type);
+    member_ref.as_ptr = member->field.static_initializer;
+    
+    return member_ref;
 }
 
-void assign_field(Context *ctx, void* struct_ptr, Member member, Value val) {
-    if (member.kind != MEMBER_FIELD) {
+Value get_member_val(Struct strct, Member *member) {
+    Value member_val = create_value(member->type);
+
+    if (member->kind == MEMBER_METHOD) {
+        member_val.as_ptr = member->method.func;
+        member_val.type = member->method.func->type;
+        return member_val;
+    }
+
+    Value *val = hm_get_hashed(strct.members, hash_member(member));
+    return *val;
+}
+
+Value get_member_ref(Context *ctx, Struct strct, Member *member) {
+    Value member_ref = create_value(VOID_TYPE);
+
+    if (member->kind == MEMBER_METHOD) {
+        Value val = create_value(member->type);
+        val.as_ptr = member->method.func;
+        
+        member_ref.type = alloc_ref_type(ctx, member->method.func->type);
+        member_ref.as_ptr = alloc_value(val);
+        return member_ref;
+    }
+
+    member_ref.type = alloc_ref_type(ctx, member->type);
+    member_ref.as_ptr = hm_get_hashed(strct.members, hash_member(member));
+    
+    return member_ref;
+}
+
+Value copy_value(Value *value) {
+    switch (value->type->kind) {
+        case TYPE_FUNC:
+        case TYPE_TYPE:
+        case TYPE_REF:
+        case TYPE_ARRAY:
+        case TYPE_PRIMITIVE: {
+            return *value;
+        }
+
+        case TYPE_STRUCT: {
+            Value val = create_value(value->type);
+            val.as_struct = alloc_struct_value(value->type);
+
+            for (size_t i = 0; i < value->type->members.count; ++i) {
+                Member *member = value->type->members.items[i];
+                size_t hash = hash_member(member);
+
+                Value *src = hm_get_hashed(value->as_struct.members, hash);
+                Value *copied = alloc_value(copy_value(src));
+                hm_put_hashed(val.as_struct.members, hash, copied);
+            }
+
+            return val;
+        }
+    }
+
+    assert(0 && "UNREACHABLE");
+}
+
+void assign_field(Context *ctx, Struct strct, Member *member, Value val) {
+    if (member->kind != MEMBER_FIELD) {
         return;
     }
     
-    void *field_ptr = (char*)struct_ptr + member.field.offset;
-    Value value = cast_value(ctx, val, member.type);
+    Value *field_val = hm_get_hashed(strct.members, hash_member(member));
+    if (field_val == NULL) {
+        append_error(ctx, ERROR_NOT_DEFINED);
+        return;
+    }
+
+    Value value = cast_value(ctx, val, member->type);
     if (has_errors(ctx)) {
         return;
     }
-    
-    store_value(field_ptr, member.type, value, ctx);
+
+    *field_val = copy_value(&value);
 }
 
-size_t get_struct_fields_size(Members fields) {
-    size_t size = 0;
-    size_t max_align = 1;
-    
-    for (size_t i = 0; i < fields.count; ++i) {
-        size_t field_size  = fields.items[i].type->size;
-        size_t field_align = fields.items[i].type->alignment;
-        
-        if (field_align > max_align) {
-            max_align = field_align;
-        }
-        
-        size_t padding = PADDING(size, field_align);
-        size += padding;
-        
-        size += field_size;
-    }
-    
-    size += PADDING(size, max_align);
-    return size;
-}
-
-size_t get_fields_alignment(Members fields) {
-    size_t max_align = 1;
-
-    for (size_t i = 0; i < fields.count; ++i) {
-        size_t field_align = fields.items[i].type->alignment;
-        if (field_align > max_align) {
-            max_align = field_align;
-        }
-    }
-
-    return max_align;
-}
-
-Type *alloc_struct_type(String_Builder *name_sb, Members fields, Type *el_type, bool constant) {
+Type *alloc_struct_type(String_Builder *name_sb, Members members) {
     Type *type = (Type*)calloc(1, sizeof(Type));
     assert(type != NULL && "Failed to allocate type");
-
-    size_t type_size = get_struct_fields_size(fields);
-    size_t type_alignment = get_fields_alignment(fields);
-
+    
     *type = (Type){
         .name = name_sb,
         .symb_kind = SYMB_TYPE,
-        .constant = constant,
+        .constant = true,
         .kind = TYPE_STRUCT,
-        .size = type_size,
-        .alignment = type_alignment,
-        .el_type = el_type,
-        .members = fields,
+        .size = sizeof(Value) * members.count,
+        .el_type = NULL,
+        .members = members,
     };
 
     return type;
 }
 
+Type *alloc_ref_type(Context *ctx, Type *t) {
+    size_t h = hash_type(t);
+    Type *type = hm_get_hashed(ctx->type_cache.ref_cache, h);
+    if (type != NULL) {
+        return type;
+    }
+    
+    type = (Type*)calloc(1, sizeof(Type));
+    assert(type != NULL && "Failed to allocate type");
+    
+    *type = (Type){
+        .name = NULL,
+        .symb_kind = SYMB_TYPE,
+        .constant = true,
+        .kind = TYPE_REF,
+        .size = sizeof(PTR_CTYPE),
+        .el_type = t,
+        .members = (Members){0},
+    };
+
+    hm_put_hashed(ctx->type_cache.ref_cache, h, type);
+    return type;
+}
+
 Type *alloc_type_type(Context *ctx, Type *t) {
-    Type *type = hm_get_hashed(ctx->type_cache, hash_type(t));
+    size_t h = hash_type(t);
+    Type *type = hm_get_hashed(ctx->type_cache.type_cache, h);
     if (type != NULL) {
         return type;
     }
@@ -429,16 +403,17 @@ Type *alloc_type_type(Context *ctx, Type *t) {
         .constant = true,
         .kind = TYPE_TYPE,
         .size = sizeof(Func),
-        .alignment = ALIGNOF(Func),
         .el_type = t,
         .members = (Members){0},
     };
 
+    hm_put_hashed(ctx->type_cache.type_cache, h, type);
     return type;
 }
 
 Type *alloc_func_type(Context *ctx, Func *func) {
-    Type *type = hm_get_hashed(ctx->type_cache, hash_func(func));
+    size_t h = hash_func(func);
+    Type *type = hm_get_hashed(ctx->type_cache.func_cache, h);
     if (type != NULL) {
         return type;
     }
@@ -452,23 +427,34 @@ Type *alloc_func_type(Context *ctx, Func *func) {
         .constant = true,
         .kind = TYPE_FUNC,
         .size = sizeof(Func),
-        .alignment = ALIGNOF(Func),
         .el_type = NULL,
         .members = (Members){0},
         .func = func,
     };
 
+    hm_put_hashed(ctx->type_cache.func_cache, h, type);
     return type;
 }
 
 Type *alloc_array_type(Context *ctx, Type *el_type) {
-    Type *type = hm_get_hashed(ctx->type_cache, hash_type(el_type));
+    Type tmp = {
+        .kind = TYPE_ARRAY,
+        .el_type = el_type,
+        .members = {0}
+    };
+    
+    size_t h = hash_type(&tmp);
+    Type *type = hm_get_hashed(ctx->type_cache.array_cache, h);
     if (type != NULL) {
         return type;
     }
         
     type = (Type*)calloc(1, sizeof(Type));
     assert(type != NULL && "Failed to allocate type");
+
+    if (el_type == NULL) {
+        el_type = ANY_TYPE;
+    }
     
     *type = (Type){
         .name = NULL,
@@ -476,11 +462,11 @@ Type *alloc_array_type(Context *ctx, Type *el_type) {
         .constant = true,
         .kind = TYPE_ARRAY,
         .size = sizeof(Array),
-        .alignment = ALIGNOF(Array),
         .el_type = el_type,
         .members = (Members){0},
     };
 
+    hm_put_hashed(ctx->type_cache.array_cache, h, type);
     return type;
 }
 
@@ -526,7 +512,10 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
                 return;
             }
             
-            to_str(sb, ctx, va_args->items[va_arg_pos]);
+            to_str(sb, ctx, va_args->items[va_arg_pos], 0);
+            if (has_errors(ctx)) {
+                return;
+            }
             ++va_arg_pos;
         }
         else {
@@ -554,7 +543,7 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
                 }
             }
             else {
-                to_str(sb, ctx, result.val);
+                to_str(sb, ctx, result.val, 0);
                 if (has_errors(ctx)) {
                     ast_free(expr);
                     return;
@@ -582,7 +571,14 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
 // TODO: Force types to have to_str method (Implement traits)
 // TODO: Implement any type
 
-void to_str(String_Builder *sb, Context *ctx, Value val) {
+void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
+    if (depth >= 1024) {
+        append_error(ctx, ERROR_RECURSION_LIMIT_EXCEEDED);
+        return;
+    }
+    
+    ++depth;
+    
     switch (val.type->kind) {
         case TYPE_PRIMITIVE: {
             if (val.type == INT_TYPE) {
@@ -615,7 +611,10 @@ void to_str(String_Builder *sb, Context *ctx, Value val) {
 
             if (arr != NULL) {
                 for (size_t i = 0; i < arr->count; ++i) {
-                    to_str(sb, ctx, arr->items[i]);
+                    to_str(sb, ctx, arr->items[i], depth);
+                    if (has_errors(ctx)) {
+                        return;
+                    }
 
                     if (i < arr->count - 1) {
                         sb_appendf(sb, ", ");
@@ -629,25 +628,40 @@ void to_str(String_Builder *sb, Context *ctx, Value val) {
         case TYPE_STRUCT: {
             sb_appendc(sb, '{');
 
-            void *struct_ptr = val.as_ptr;
+            Struct strct = val.as_struct;
 
-            if (struct_ptr != NULL) {
-                for (size_t i = 0; i < val.type->members.count; ++i) {
-                    Member field = val.type->members.items[i];
+            size_t fields_count = 0;
+            for (size_t i = 0; i < val.type->members.count; ++i) {
+                Member *member = val.type->members.items[i];
+                if (member->kind == MEMBER_FIELD) {
+                    ++fields_count;
+                }
+            }
 
-                    sb_append_sb(sb, field.name);
-                    sb_appendf(sb, ": ");
+            size_t fields_printed = 0;
+            for (size_t i = 0; i < val.type->members.count; ++i) {
+                Member *member = val.type->members.items[i];
+                if (member->kind == MEMBER_METHOD) {
+                    continue;
+                }
+                
+                sb_append_sb(sb, member->name);
+                sb_appendf(sb, ": ");
 
-                    Value field_val = get_member_val(ctx, struct_ptr, field);
-                    if (has_errors(ctx)) {
-                        break;
-                    }
-                    
-                    to_str(sb, ctx, field_val);
+                Value field_val = get_member_val(strct, member);
+                if (has_errors(ctx)) {
+                    break;
+                }
+                
+                to_str(sb, ctx, field_val, depth);
+                if (has_errors(ctx)) {
+                    return;
+                }
 
-                    if (i < val.type->members.count - 1) {
-                        sb_appendf(sb, ", ");
-                    }
+                ++fields_printed;
+                
+                if (fields_printed < fields_count) {
+                    sb_appendf(sb, ", ");
                 }
             }
             
@@ -686,6 +700,14 @@ void to_str(String_Builder *sb, Context *ctx, Value val) {
             }
 
             sb_appendc(sb, ')');
+        } break;
+
+        case TYPE_REF: {
+            while (val.type->kind == TYPE_REF) {
+                val = *(Value*)val.as_ptr;
+            }
+
+            to_str(sb, ctx, val, depth);
         } break;
             
         default: {
@@ -797,39 +819,34 @@ bool compatible_types(Type *type_1, Type *type_2) {
         return true;
     }
     
-    switch (type_2->kind) {
+    switch (type_1->kind) {
         case TYPE_PRIMITIVE: {
-            if (type_2 == INT_TYPE || type_2 == CHAR_TYPE || type_2 == FLOAT_TYPE) {
-                return IS_INTLIKE(type_1) || type_1 == FLOAT_TYPE || type_1 == VOID_TYPE;
+            if (IS_INTLIKE(type_1) || type_1 == FLOAT_TYPE || type_1 == VOID_TYPE) {
+                return IS_INTLIKE(type_2) || type_2 == FLOAT_TYPE || type_2 == VOID_TYPE || type_2 == STR_TYPE;
             }
-            if (type_2 == BOOL_TYPE) {
-                return IS_INTLIKE(type_1) || type_1 == FLOAT_TYPE || type_1 == VOID_TYPE || type_1 == STR_TYPE;
-            }
-            if (type_2 == STR_TYPE || type_2 == ANY_TYPE) {
+            if (type_1 == STR_TYPE || type_1 == ANY_TYPE || type_2 == STR_TYPE || type_2 == ANY_TYPE) {
                 return true;
             }
-            
-            return false;
-        }
+        } break;
 
         case TYPE_ARRAY: {
             if (type_1->el_type == ANY_TYPE || type_2->el_type == ANY_TYPE) {
                 return true;
             }
-        }
-            
-        default: {
-            return false;
-        }
+        } break;
+
+        default: break;
     }
+
+    return false;
 }
 
 Value cast_value(Context *ctx, Value val, Type *type) {
-    Value casted = create_value(type);
-    
     if (val.type == type) {
         return val;
     }
+    
+    Value casted = create_value(type);
 
     switch (type->kind) {
         case TYPE_PRIMITIVE: {
@@ -851,7 +868,11 @@ Value cast_value(Context *ctx, Value val, Type *type) {
             }
             if (type == STR_TYPE) {
                 String_Builder *sb = sb_alloc();
-                to_str(sb, ctx, val);
+                to_str(sb, ctx, val, 0);
+                if (has_errors(ctx)) {
+                    return casted;
+                }
+                
                 casted.as_ptr = sb;
                 return casted;
             }
@@ -864,6 +885,11 @@ Value cast_value(Context *ctx, Value val, Type *type) {
         }
 
         case TYPE_ARRAY: {
+            if (val.type->kind != TYPE_ARRAY) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return casted;
+            }
+
             if (val.type->el_type == ANY_TYPE) {
                 casted.as_ptr = val.as_ptr;
                 return casted;
@@ -871,6 +897,52 @@ Value cast_value(Context *ctx, Value val, Type *type) {
             if (type->el_type == ANY_TYPE) {
                 return val;
             }
+        } break;
+
+        case TYPE_STRUCT: {
+            while (val.type->kind == TYPE_REF) {
+                val = *(Value*)val.as_ptr;
+            }
+            
+            if (!compatible_types(val.type, type)) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return val;
+            }
+
+            return val;
+        }
+
+        case TYPE_REF: {
+            size_t val_ref_depth = 1;
+            Value temp_val = val;
+            while (temp_val.type->kind == TYPE_REF) {
+                temp_val = *(Value*)temp_val.as_ptr;
+                ++val_ref_depth;
+            }
+
+            size_t type_ref_depth = 1;
+            Type *temp_type = type;
+            while (temp_type->kind == TYPE_REF) {
+                temp_type = temp_type->el_type;
+                ++type_ref_depth;
+            }
+
+            if (val_ref_depth < type_ref_depth) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return val;
+            }
+            
+            while (val_ref_depth > type_ref_depth) {
+                temp_val = *(Value*)temp_val.as_ptr;
+                --val_ref_depth;
+            }
+
+            if (!compatible_types(temp_val.type, temp_type)) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return val;
+            }
+
+            return val;
         }
             
         default: {
@@ -878,6 +950,8 @@ Value cast_value(Context *ctx, Value val, Type *type) {
             return casted;
         }
     }
+
+    return casted;
 }
 
 Value binary_plus(Context *ctx, Value lhs, Value rhs) {
@@ -919,8 +993,10 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
             return val;
         }
         if (rhs.type == STR_TYPE) {
-            sb_insertc(rhs.as_ptr, lhs.as_int, 0);
-            val.as_ptr = rhs.as_ptr;
+            String_Builder *sb = sb_alloc();
+            sb_appendc(sb, lhs.as_int);
+            sb_append_sb(sb, rhs.as_ptr);
+            val.as_ptr = sb;
             val.type = STR_TYPE;
             return val;
         }
@@ -928,14 +1004,18 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
 
     if (lhs.type == STR_TYPE) {
         if (rhs.type == CHAR_TYPE) {
-            sb_appendc(lhs.as_ptr, rhs.as_int);
-            val.as_ptr = lhs.as_ptr;
+            String_Builder *sb = sb_alloc();
+            sb_append_sb(sb, lhs.as_ptr);
+            sb_appendc(sb, rhs.as_int);
+            val.as_ptr = sb;
             val.type = STR_TYPE;
             return val;
         }
         if (rhs.type == STR_TYPE) {
-            sb_append_sb(lhs.as_ptr, rhs.as_ptr);
-            val.as_ptr = lhs.as_ptr;
+            String_Builder *sb = sb_alloc();
+            sb_append_sb(sb, lhs.as_ptr);
+            sb_append_sb(sb, rhs.as_ptr);
+            val.as_ptr = sb;
             val.type = STR_TYPE;
             return val;
         }
@@ -1025,8 +1105,8 @@ Value binary_div(Context *ctx, Value lhs, Value rhs) {
                 append_error(ctx, ERROR_DIV_BY_ZERO);
                 return val;
             }
-            val.as_int = lhs.as_int / rhs.as_int;
-            val.type = INT_TYPE;
+            val.as_float = (float)lhs.as_int / (float)rhs.as_int;
+            val.type = FLOAT_TYPE;
             return val;
         }
         if (rhs.type == FLOAT_TYPE) {
@@ -1459,5 +1539,3 @@ Value unary_not(Context *ctx, Value x) {
     val.as_int = !to_bool(ctx, x);
     return val;
 }
-
-#endif

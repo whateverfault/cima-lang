@@ -6,20 +6,28 @@
 #define BOOL_CTYPE bool
 #define CHAR_CTYPE char
 #define STR_CTYPE String_Builder
-#define ANY_CTYPE void*
+#define PTR_CTYPE void*
 
 #define INT_CTYPE_MIN INT_MIN
 #define INT_CTYPE_MAX INT_MAX
 
-typedef struct Type Type;
-typedef struct Value {
-    Type *type;
+#define VALUE_OFFSET 
 
+typedef struct Type Type;
+typedef struct Struct {
+    Type *type;
+    HashMap *members;
+} Struct;
+
+typedef struct Value {
     union {
         INT_CTYPE as_int;
         FLOAT_CTYPE as_float;
+        Struct as_struct;
         void *as_ptr;
     };
+    
+    Type *type;
 } Value;
 
 typedef struct Array {
@@ -60,10 +68,8 @@ typedef struct Member {
         struct {
             union {
                 AST_Node *initializer;
-                Value static_initializer;
+                Value *static_initializer;
             };
-
-            size_t offset;
         } field;
 
         struct {
@@ -73,7 +79,7 @@ typedef struct Member {
 } Member;
 
 typedef struct Members {
-    Member *items;
+    Member **items;
     size_t count;
     size_t capacity;
 } Members;

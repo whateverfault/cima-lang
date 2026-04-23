@@ -35,15 +35,22 @@ extern const Type array_any_symb;
 #define ARRAY_ANY_TYPE (void*)&array_any_symb
 #define VARIADIC_TYPE (void*)&variadic_symb
 
-Value get_static_member_val(Member member);
-bool get_member(Type *type, String_View *name_sv, Member *member);
-Value get_member_val(Context *ctx, void *struct_ptr, Member member);
-void assign_field(Context *ctx, void* struct_ptr, Member member, Value val);
+Value get_static_member_val(Member *member);
+Value get_static_member_ref(Context *ctx, Member *member);
+Value get_member_val(Struct strct, Member *member);
+Value get_member_ref(Context *ctx, Struct strct, Member *member);
+bool get_member(Type *type, String_View *name_sv, Member **member);
+void assign_field(Context *ctx, Struct strct, Member *member, Value val);
+Value copy_value(Value *value);
 
-void *alloc_type_value(Context *ctx, Type *type);
+void alloc_type_value(Value *val, Type *type);
 
-Type *alloc_struct_type(String_Builder *name_sb, Members fields, Type *el_type, bool constant);
+Array *alloc_array_value(Type *el_type);
+Struct alloc_struct_value(Type *type);
+
+Type *alloc_struct_type(String_Builder *name_sb, Members members);
 Type *alloc_type_type(Context *ctx, Type *t);
+Type *alloc_ref_type(Context *ctx, Type *t);
 Type *alloc_func_type(Context *ctx, Func *func);
 Type *alloc_array_type(Context *ctx, Type *el_type);
 
@@ -51,7 +58,7 @@ bool compatible_types(Type *type_1, Type *type_2);
 Value cast_value(Context *ctx, Value val, Type *type);
 
 void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_args);
-void to_str(String_Builder *sb, Context *ctx, Value val);
+void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth);
 bool to_bool(Context *ctx, Value val);
 
 Value binary_plus(Context *ctx, Value lhs, Value rhs);

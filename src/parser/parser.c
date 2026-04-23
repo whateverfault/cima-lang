@@ -206,7 +206,7 @@ AST_NodeMemberAccess *alloc_member_access_node(AST_Node *node, AST_Node *member)
     return init_node;
 }
 
-AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node *body, AST_Type *ret_type, bool is_const, bool is_static) {
+AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node *body, AST_Type *ret_type, bool is_static) {
     AST_NodeFuncDecl *func_node = (AST_NodeFuncDecl*)malloc(sizeof(AST_NodeFuncDecl));
     assert(func_node != NULL && "Memory allocation failed");
 
@@ -215,13 +215,12 @@ AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node 
     func_node->args = args;
     func_node->body = body;
     func_node->ret_type = ret_type;
-    func_node->is_const = is_const;
     func_node->is_static = is_static;
     
     return func_node;
 }
 
-AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST_Nodes funcs, bool constant) {
+AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST_Nodes funcs) {
     AST_NodeStructDecl *struct_node = (AST_NodeStructDecl*)malloc(sizeof(AST_NodeStructDecl));
     assert(struct_node != NULL && "Memory allocation failed");
 
@@ -229,7 +228,6 @@ AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST
     struct_node->name = name;
     struct_node->fields = fields;
     struct_node->methods = funcs;
-    struct_node->constant = constant;
     
     return struct_node;
 }
@@ -391,6 +389,7 @@ UnaryOp get_unop(Token tok) {
     switch (tok.kind) {
         case TOKEN_PLUSPLUS: return UNOP_INCREMENT;
         case TOKEN_MINUSMINUS: return UNOP_DECREMENT;
+        case TOKEN_AND: return UNOP_REF;
         case TOKEN_NOT: return UNOP_NOT;
         case TOKEN_PLUS: return UNOP_PLUS;
         case TOKEN_MINUS: return UNOP_MINUS;
@@ -501,7 +500,7 @@ Precedence get_precedence(Token tok) {
     return prec;
 }
 
-ParserError parse_unop(Lexer *l, AST_Node **ret) {
+ParserError parse_unary_expr(Lexer *l, AST_Node **ret) {
     if (!is_unary_expr_start(l->cur)) {
         lexer_next(l);
         return PERROR_UNEXPECTED_TOKEN;
@@ -1005,7 +1004,7 @@ ParserError parse_prim_expr(Lexer *l, AST_Node **ret) {
 
 ParserError parse_prefix_expr(Lexer *l, AST_Node **ret) {
     if (is_unop(l->cur)) {
-        return parse_unop(l, ret);
+        return parse_unary_expr(l, ret);
     }
 
     return parse_prim_expr(l, ret);
@@ -1109,7 +1108,6 @@ ParserError parse_index_expr(Lexer *l, AST_Node *node, AST_Node **ret) {
     }
 
     if (l->cur.kind != TOKEN_RBRACK) {
-        ast_free(node);
         ast_free(index);
         return PERROR_UNEXPECTED_TOKEN;
     }
@@ -1334,11 +1332,8 @@ ParserError parse_array_type(Lexer *l, AST_Node **ret) {
 
     lexer_next(l);
     
-    AST_Node *el_type;
-    if (l->cur.kind == TOKEN_RBRACK) {
-        el_type = (void*)&ast_any_type;
-    }
-    else {
+    AST_Node *el_type = NULL;
+    if (l->cur.kind != TOKEN_RBRACK) {
         ParserError err = parse_type(l, &el_type);
         if (err != PERROR_NONE) {
             return err;
@@ -1355,6 +1350,16 @@ ParserError parse_array_type(Lexer *l, AST_Node **ret) {
     return PERROR_NONE;
 }
 
+ParserError parse_ref_type(Lexer *l, AST_Node **ret) {
+    if (l->cur.kind != TOKEN_AND) {
+        return PERROR_UNEXPECTED_TOKEN;
+    }
+
+    lexer_next(l);
+
+    return parse_type(l, ret);
+}
+
 ParserError parse_type(Lexer *l, AST_Node **ret) {
     switch (l->cur.kind) {
         case TOKEN_ELLIPSIS:
@@ -1364,6 +1369,10 @@ ParserError parse_type(Lexer *l, AST_Node **ret) {
             
         case TOKEN_LBRACK: {
             return parse_array_type(l, ret);
+        }
+
+        case TOKEN_AND: {
+            return parse_ref_type(l, ret);
         }
 
         default: {
@@ -1472,7 +1481,7 @@ ParserError parse_patterns(Lexer *l, AST_Patterns *patterns) {
     return PERROR_NONE;
 }
 
-ParserError parse_func_item(Lexer *l, bool is_const, bool is_static, AST_Node **ret) {
+ParserError parse_func_item(Lexer *l, bool is_static, AST_Node **ret) {
     assert(l->cur.kind == TOKEN_KW_FUNC);
 
     lexer_next(l);
@@ -1527,11 +1536,11 @@ ParserError parse_func_item(Lexer *l, bool is_const, bool is_static, AST_Node **
         return err;
     }
 
-    *ret = (void*)alloc_func_node(name, args, body, ret_type, is_const, is_static);
+    *ret = (void*)alloc_func_node(name, args, body, ret_type, is_static);
     return PERROR_NONE;
 }
 
-ParserError parse_struct_item(Lexer *l, bool constant, AST_Node **ret) {
+ParserError parse_struct_item(Lexer *l, AST_Node **ret) {
     assert(l->cur.kind == TOKEN_KW_STRUCT);
 
     lexer_next(l);
@@ -1592,7 +1601,7 @@ ParserError parse_struct_item(Lexer *l, bool constant, AST_Node **ret) {
 
             case TOKEN_KW_FUNC: {
                 AST_Node *func;
-                ParserError err = parse_func_item(l, is_const, is_static, &func);
+                ParserError err = parse_func_item(l, is_static, &func);
                 if (err != PERROR_NONE) {
                     ast_patterns_free(fields);
                     ast_nodes_free(funcs);
@@ -1612,7 +1621,7 @@ ParserError parse_struct_item(Lexer *l, bool constant, AST_Node **ret) {
 
     lexer_next(l);
 
-    *ret = (void*)alloc_struct_node(name_sv, fields, funcs, constant);
+    *ret = (void*)alloc_struct_node(name_sv, fields, funcs);
     return PERROR_NONE; 
 }
 
@@ -1660,7 +1669,7 @@ ParserError parse_let_stmt(Lexer *l, bool constant, AST_Node **ret) {
     return PERROR_NONE;
 }
 
-ParserError parse_const_item(Lexer *l, bool is_static, AST_Node **ret) {
+ParserError parse_const_item(Lexer *l, AST_Node **ret) {
     assert(l->cur.kind == TOKEN_KW_CONST);
     lexer_next(l);
 
@@ -1668,14 +1677,6 @@ ParserError parse_const_item(Lexer *l, bool is_static, AST_Node **ret) {
     ParserError err = PERROR_NONE;
     
     switch (l->cur.kind) {
-        case TOKEN_KW_FUNC: {
-            err = parse_func_item(l, true, is_static, &node);
-        } break;
-
-        case TOKEN_KW_STRUCT: {
-            err = parse_struct_item(l, true, &node);
-        } break;
-            
         case TOKEN_NAME: {
             err = parse_let_stmt(l, true, &node);
         } break;
@@ -1789,18 +1790,30 @@ ParserError parse_item(Lexer *l, AST_Node **ret) {
     
     switch (l->cur.kind) {
         case TOKEN_KW_FUNC: {
-            err = parse_func_item(l, false, is_static, &node);
+            err = parse_func_item(l, is_static, &node);
         } break;
 
         case TOKEN_KW_STRUCT: {
-            err = parse_struct_item(l, false, &node);
+            if (is_static) {
+                return PERROR_UNEXPECTED_TOKEN;
+            }
+            
+            err = parse_struct_item(l, &node);
         } break;
 
         case TOKEN_KW_CONST: {
-            err = parse_const_item(l, is_static, &node);
+            if (is_static) {
+                return PERROR_UNEXPECTED_TOKEN;
+            }
+            
+            err = parse_const_item(l, &node);
         } break;
 
         default: {
+            if (is_static) {
+                return PERROR_UNEXPECTED_TOKEN;
+            }
+            
             err = parse(l, &node);
         }
     }

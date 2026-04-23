@@ -24,7 +24,7 @@ typedef struct Symbol {
 
 typedef struct Var {
     SYMBOL_FIELDS
-    Value val;
+    Value *val;
 } Var;
 
 #define FUNC_FIELDS \
@@ -65,6 +65,7 @@ typedef enum TypeKind {
     TYPE_STRUCT,
     TYPE_FUNC,
     TYPE_TYPE,
+    TYPE_REF,
 } TypeKind;
 
 typedef struct Type Type;
@@ -72,7 +73,6 @@ typedef struct Type {
     SYMBOL_FIELDS
     TypeKind kind;
     size_t size;
-    size_t alignment;
     Type *el_type;
     Members members;
     Func *func;

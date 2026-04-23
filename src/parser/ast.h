@@ -50,6 +50,7 @@ typedef enum {
 typedef enum {
     UNOP_INCREMENT,
     UNOP_DECREMENT,
+    UNOP_REF,
     UNOP_NOT,
     UNOP_PLUS,
     UNOP_MINUS,
@@ -158,11 +159,6 @@ typedef struct AST_Type {
     bool is_array;
 } AST_Type;
 
-static const AST_Type ast_any_type = (AST_Type){
-    .kind = AST_TYPE,
-    .provided_name = false,
-};
-
 typedef struct {
     AST_FIELDS
     AST_Node *to_call;
@@ -193,7 +189,6 @@ typedef struct AST_NodeFnDecl {
     AST_Patterns args;
     AST_Node *body;
     AST_Type *ret_type;
-    bool is_const;
     bool is_static;
 } AST_NodeFuncDecl;
 
@@ -202,7 +197,6 @@ typedef struct {
     String_View name;
     AST_Patterns fields;
     AST_Nodes methods;
-    bool constant;
 } AST_NodeStructDecl;
 
 typedef struct {

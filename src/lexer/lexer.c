@@ -37,6 +37,7 @@ bool is_binop(Token tok) {
 
 bool is_unop(Token tok) {
     switch (tok.kind) {
+        case TOKEN_AND:
         case TOKEN_PLUSPLUS:
         case TOKEN_MINUSMINUS:
         case TOKEN_NOT:

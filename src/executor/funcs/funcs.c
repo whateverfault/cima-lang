@@ -21,7 +21,7 @@ void check_args(Context *ctx, Func *func, AST_Args args) {
         return;
     }
 
-    // TODO: Implement get_type_of_ast
+    // TODO: Implement static type checking
     
     /*for (size_t i = 0; i < args_count; ++i) {
         Pattern arg = func->args.items[i];
@@ -57,7 +57,7 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
 
     Value va_args = create_value(VARIADIC_TYPE);
     if (HAS_VARIADIC(func)) {
-        va_args.as_ptr = alloc_arr(ctx, VARIADIC_TYPE);
+        va_args.as_ptr = alloc_array_value(ANY_TYPE);
     }
 
     bool has_named_va_arg = false;
@@ -128,13 +128,13 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
         func_args[i].name = name_sb;
         func_args[i].constant = false;
         func_args[i].is_static = false;
-        func_args[i].val = result.val;
+        func_args[i].val = alloc_value(result.val);
     }
 
     if (va_args.as_ptr != NULL) {
         size_t last = func->args.count - 1;
         func_args[last].name = func->args.items[last].name;
-        func_args[last].val = va_args;
+        func_args[last].val = alloc_value(va_args);
         func_args[last].constant = false;
     }
     
@@ -246,9 +246,9 @@ Value format_func(Context *ctx, Context *fn_ctx) {
     }
 
     String_View fmt_sv = {0};
-    sv_from_sb(&fmt_sv, fmt->val.as_ptr);
+    sv_from_sb(&fmt_sv, fmt->val->as_ptr);
 
-    Array *va_args_arr = (void*)va_args->val.as_ptr;
+    Array *va_args_arr = (void*)va_args->val->as_ptr;
     
     ret.as_ptr = sb_alloc();
     format_str(ret.as_ptr, ctx, fmt_sv, va_args_arr);
@@ -264,13 +264,13 @@ Value read_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    if (intercept->val.as_int) {
+    if (intercept->val->as_int) {
         set_echo_enabled(false);
     }
 
     int c = getchar();
 
-    if (intercept->val.as_int) {
+    if (intercept->val->as_int) {
         set_echo_enabled(true);
     }
 
@@ -294,21 +294,21 @@ Value readln_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    if (intercept->val.as_int) {
+    if (intercept->val->as_int) {
         set_echo_enabled(false);
     }
 
     if (!sb_getline(ret.as_ptr, stdin)) {
         append_error(ctx, ERROR_CLOSED_STDIN);
 
-        if (intercept->val.as_int) {
+        if (intercept->val->as_int) {
             set_echo_enabled(true);
         }
 
         return ret;
     }
 
-    if (intercept->val.as_int) {
+    if (intercept->val->as_int) {
         set_echo_enabled(true);
     }
 
@@ -343,7 +343,7 @@ Value move_cursor_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
     
-    printf("\x1b[%d;%dH", col->val.as_int, row->val.as_int);
+    printf("\x1b[%d;%dH", col->val->as_int, row->val->as_int);
     return ret;
 }
 
@@ -357,7 +357,7 @@ Value trim(Context *ctx, Context *fn_ctx, trim_fn trim_fn) {
         return ret;
     }
 
-    String_Builder trimmed = trim_fn(str->val.as_ptr);
+    String_Builder trimmed = trim_fn(str->val->as_ptr);
     String_Builder *sb = sb_alloc();
     sb->items = trimmed.items;
     sb->count = trimmed.count;
@@ -388,7 +388,7 @@ Value arr_len_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
     
-    Array *arr_val = arr->val.as_ptr;
+    Array *arr_val = arr->val->as_ptr;
     ret.as_int = arr_val->count;
 
     return ret;
@@ -412,14 +412,14 @@ Value randint_func(Context *ctx, Context *fn_ctx) {
     init_rng();
 
 
-    int rand_max = max->val.as_int - min->val.as_int + 1;
+    int rand_max = max->val->as_int - min->val->as_int + 1;
     
     if (rand_max == 0) {
         append_error(ctx, ERROR_DIV_BY_ZERO);
         return ret;
     }
     
-    ret.as_int = min->val.as_int + rand() % (max->val.as_int - min->val.as_int + 1);
+    ret.as_int = min->val->as_int + rand() % (max->val->as_int - min->val->as_int + 1);
     return ret;
 }
 
@@ -438,8 +438,8 @@ Value append_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    Array *arr = arr_arg->val.as_ptr;
-    Array *va_args = va_args_arg->val.as_ptr;
+    Array *arr = arr_arg->val->as_ptr;
+    Array *va_args = va_args_arg->val->as_ptr;
 
     da_append_many(arr, va_args);
     return ret;
@@ -460,8 +460,8 @@ Value remove_at_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    Array *arr = arr_arg->val.as_ptr;
-    INT_CTYPE index = index_arg->val.as_int;
+    Array *arr = arr_arg->val->as_ptr;
+    INT_CTYPE index = index_arg->val->as_int;
 
     if (index < 0 || index >= arr->count) {
         append_error(ctx, ERROR_INDEX_OUT_OF_BOUNDS);
