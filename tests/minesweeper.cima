@@ -1,0 +1,237 @@
+enum CellType {
+    Empty : ' '
+    Mine  : '*'
+    Flag  : 'F'
+    Hidden: '#'
+}
+
+enum GameStatus {
+    Playing : 0
+    Win     : 1
+    Lose    : 2
+}
+
+struct Position {
+    x : int
+    y : int
+}
+
+struct BoardCell {
+    is_mine     : bool
+    is_revealed : bool
+    is_flagged  : bool
+    neighbor_m  : int
+}
+
+struct Minesweeper {
+    width        : int
+    height       : int
+    mine_count   : int
+    grid         : [[BoardCell]]
+    cursor       : Position
+    status       : GameStatus
+    first_reveal : bool
+}
+
+func get_digit_char(val: int) : char {
+    return val + 48
+}
+
+let game = @Minesweeper{}
+ms_init(&game, 8, 8, 10)
+ms_main_loop(&game)
+
+func ms_init(game: &Minesweeper, w: int, h: int, mines: int) {
+    game.width = w
+    game.height = h
+    game.mine_count = mines
+    game.status = GameStatus.Playing
+    game.cursor = @Position{x: 0, y: 0}
+    game.first_reveal = true
+    
+    for let y = 0; y < h; ++y {
+        let row = []
+        for let x = 0; x < w; ++x {
+            append(row, @BoardCell{false, false, false, 0})
+        }
+        append(game.grid, row)
+    }
+}
+
+func generate_mines(game: &Minesweeper, safe_x: int, safe_y: int) {
+    let placed = 0
+    while placed < game.mine_count {
+        let rx = randint(0, game.width - 1)
+        let ry = randint(0, game.height - 1)
+        
+        let is_safe_zone = false
+        for let dy = -1; dy <= 1; ++dy {
+            for let dx = -1; dx <= 1; ++dx {
+                if rx == safe_x + dx and ry == safe_y + dy {
+                    is_safe_zone = true
+                }
+            }
+        }
+
+        let target = game.grid[ry][rx]
+        if !target.is_mine and !is_safe_zone {
+            target.is_mine = true
+            game.grid[ry][rx] = target
+            ++placed
+        }
+    }
+
+    for let y = 0; y < game.height; ++y {
+        for let x = 0; x < game.width; ++x {
+            let cell = game.grid[y][x]
+            if !cell.is_mine {
+                cell.neighbor_m = count_neighbor_mines(game, x, y)
+                game.grid[y][x] = cell
+            }
+        }
+    }
+}
+
+func count_neighbor_mines(game: &Minesweeper, cx: int, cy: int) : int {
+    let count = 0
+    for let dy = -1; dy <= 1; ++dy {
+        for let dx = -1; dx <= 1; ++dx {
+            let nx = cx + dx
+            let ny = cy + dy
+            if nx >= 0 and nx < game.width and ny >= 0 and ny < game.height {
+                let check_cell = game.grid[ny][nx]
+                if check_cell.is_mine { ++count }
+            }
+        }
+    }
+    return count
+}
+
+func ms_render(game: &Minesweeper) {
+    move_cursor(0, 0)
+    println("WASD: Move | F: Flag | Space: Reveal\n")
+    
+    for let y = 0; y < game.height; ++y {
+        for let x = 0; x < game.width; ++x {
+            let cell = game.grid[y][x]
+            let display_char = ' '
+            
+            if cell.is_flagged {
+                display_char = CellType.Flag
+            } elif !cell.is_revealed {
+                display_char = CellType.Hidden
+            } elif cell.is_mine {
+                display_char = CellType.Mine
+            } else {
+                if cell.neighbor_m == 0 {
+                    display_char = CellType.Empty
+                } else {
+                    display_char = get_digit_char(cell.neighbor_m)
+                }
+            }
+
+            if x == game.cursor.x and y == game.cursor.y {
+                print("[{display_char}]")
+            } else {
+                print(" {display_char} ")
+            }
+        }
+        print("\n")
+    }
+}
+
+func reveal_cell(game: &Minesweeper, start_x: int, start_y: int) {
+    if game.first_reveal {
+        game.first_reveal = false
+        generate_mines(game, start_x, start_y)
+    }
+
+    let queue = [@Position{x: start_x, y: start_y}]
+    let head = 0
+
+    while head < len(queue) {
+        const pos = queue[head]
+        head = head + 1
+        
+        if pos.x < 0 or pos.x >= game.width or pos.y < 0 or pos.y >= game.height {
+            continue
+        }
+
+        let cell = game.grid[pos.y][pos.x]
+        if cell.is_revealed or cell.is_flagged {
+            continue
+        }
+
+        cell.is_revealed = true
+        game.grid[pos.y][pos.x] = cell
+
+        if cell.is_mine {
+            game.status = GameStatus.Lose
+            return
+        }
+
+        if cell.neighbor_m == 0 {
+            for let dy = -1; dy <= 1; ++dy {
+                for let dx = -1; dx <= 1; ++dx {
+                    if dx != 0 or dy != 0 {
+                        let nx = pos.x + dx
+                        let ny = pos.y + dy
+                        if nx >= 0 and nx < game.width and ny >= 0 and ny < game.height {
+                            let neighbor = game.grid[ny][nx]
+                            if !neighbor.is_revealed and !neighbor.is_flagged {
+                                append(queue, @Position{x: nx, y: ny})
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+func check_win(game: &Minesweeper) {
+    let unrevealed_safe = 0
+    for let y = 0; y < game.height; ++y {
+        for let x = 0; x < game.width; ++x {
+            let cell = game.grid[y][x]
+            if !cell.is_mine and !cell.is_revealed {
+                ++unrevealed_safe
+            }
+        }
+    }
+    if unrevealed_safe == 0 {
+        game.status = GameStatus.Win
+    }
+}
+
+func ms_main_loop(game: &Minesweeper) {
+    forever {
+        ms_render(game)
+        
+        if game.status == GameStatus.Lose {
+            println("\nGame Over - You hit a mine!")
+            return
+        }
+        if game.status == GameStatus.Win {
+            println("\nVictory - Board cleared!")
+            return
+        }
+
+        let key = readkey()
+        if key == 'w' and game.cursor.y > 0 { --game.cursor.y }
+        elif key == 's' and game.cursor.y < game.height - 1 { ++game.cursor.y }
+        elif key == 'a' and game.cursor.x > 0 { --game.cursor.x }
+        elif key == 'd' and game.cursor.x < game.width - 1 { ++game.cursor.x }
+        elif key == 'f' {
+            let target = game.grid[game.cursor.y][game.cursor.x]
+            if !target.is_revealed { 
+                target.is_flagged = !target.is_flagged 
+                game.grid[game.cursor.y][game.cursor.x] = target
+            }
+        }
+        elif key == ' ' or key == 'e' {
+            reveal_cell(game, game.cursor.x, game.cursor.y)
+            check_win(&game)
+        }
+    }
+}

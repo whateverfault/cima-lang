@@ -14,6 +14,7 @@ static String_Builder min_sb = CSTR_TO_SB("min");
 static String_Builder max_sb = CSTR_TO_SB("max");
 static String_Builder els_sb = CSTR_TO_SB("elements");
 static String_Builder index_sb = CSTR_TO_SB("index");
+static String_Builder ms_sb = CSTR_TO_SB("ms");
 
 static Pattern format_pattern[] = {
     (Pattern){
@@ -92,6 +93,13 @@ static Pattern remove_at_pattern[] = {
     },
 };
 
+static Pattern sleep_pattern[] = {
+    (Pattern){
+        .name = &ms_sb,
+        .type = INT_TYPE,
+    },
+};
+
 static const Pattern empty_pattern[] = {0};
 
 static const Patterns format_patterns = (Patterns){
@@ -142,6 +150,12 @@ static const Patterns remove_at_patterns = (Patterns){
     .capacity = 2,
 };
 
+static const Patterns sleep_patterns = (Patterns){
+    .items = sleep_pattern,
+    .count = 1,
+    .capacity = 1,
+};
+
 static const Patterns empty_patterns = (Patterns){
     .items = (Pattern*)empty_pattern,
     .count = 0,
@@ -154,7 +168,9 @@ static String_Builder println_sb = CSTR_TO_SB("println");
 static String_Builder read_sb = CSTR_TO_SB("read");
 static String_Builder readln_sb = CSTR_TO_SB("readln");
 static String_Builder readkey_sb = CSTR_TO_SB("readkey");
+static String_Builder key_pressed_sb = CSTR_TO_SB("key_pressed");
 static String_Builder clear_sb = CSTR_TO_SB("clear");
+static String_Builder sleep_sb = CSTR_TO_SB("sleep");
 static String_Builder move_cursor_sb = CSTR_TO_SB("move_cursor");
 static String_Builder trim_sb = CSTR_TO_SB("trim");
 static String_Builder trim_left_sb = CSTR_TO_SB("trim_left");
@@ -209,9 +225,23 @@ FuncBuiltIn builtin_funcs[builtin_funcs_count] = {
     },
     (FuncBuiltIn){
         .symb_kind = SYMB_FUNC,
+        .name = &key_pressed_sb,
+        .func = key_pressed_func,
+        .args = empty_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .symb_kind = SYMB_FUNC,
         .name = &clear_sb,
         .func = clear_func,
         .args = empty_patterns,
+        .constant = true,
+    },
+    (FuncBuiltIn){
+        .symb_kind = SYMB_FUNC,
+        .name = &sleep_sb,
+        .func = sleep_func,
+        .args = sleep_patterns,
         .constant = true,
     },
     (FuncBuiltIn){

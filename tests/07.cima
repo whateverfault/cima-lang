@@ -1,0 +1,45 @@
+enum TypeKind {
+    Int
+    Float
+    Struct
+    Enum
+    Array
+}
+
+struct Member {
+    name : str
+    type : Type
+}
+
+struct Type {
+    kind    : TypeKind
+    size    : int
+    members : [Member]
+}
+
+let builtInTypes = [
+    @Type {
+        kind : TypeKind.Int
+        size : 4
+        members : []
+    },
+    @Type {
+        kind : TypeKind.Float
+        size : 4
+        members : []
+    }
+]
+
+println("Types Kinds: ")
+for let i = 0; i < TypeKind.Array as int + 1; ++i {
+    println("{i+1}. {i as TypeKind}")
+}
+
+println("")
+
+println("Built-in Types: ")
+for let i = 0; i < len(builtInTypes); ++i {
+    println("{i+1}. {builtInTypes[i]}")
+}
+
+readkey()

@@ -27,6 +27,14 @@ void ast_patterns_free(AST_Patterns patterns) {
     da_free(patterns);
 }
 
+void ast_enum_members_free(AST_EnumMembers members) {
+    for (size_t i = 0; i < members.count; ++i) {
+        ast_free(members.items[i].initializer);
+    }
+
+    da_free(members);
+}
+
 void ast_args_free(AST_Args args) {
     for (size_t i = 0; i < args.count; ++i) {
         ast_free(args.items[i].node);
@@ -107,7 +115,7 @@ AST_Value create_ast_value(AST_LitType type, String_View view) {
 }
 
 AST_NodeLit *alloc_lit_node(AST_Value val) {
-    AST_NodeLit *lit_node = (AST_NodeLit*)malloc(sizeof(AST_NodeLit));
+    AST_NodeLit *lit_node = malloc(sizeof(AST_NodeLit));
     assert(lit_node != NULL && "Memory allocation failed");
     
     lit_node->kind = AST_LIT;
@@ -117,7 +125,7 @@ AST_NodeLit *alloc_lit_node(AST_Value val) {
 }
 
 AST_NodeBinOp *alloc_binop_node(AST_Node *lhs, BinaryOp op, AST_Node *rhs) {
-    AST_NodeBinOp *binop_node = (AST_NodeBinOp*)malloc(sizeof(AST_NodeBinOp));
+    AST_NodeBinOp *binop_node = malloc(sizeof(AST_NodeBinOp));
     assert(binop_node != NULL && "Memory allocation failed");
 
     binop_node->kind = AST_BINOP;
@@ -129,7 +137,7 @@ AST_NodeBinOp *alloc_binop_node(AST_Node *lhs, BinaryOp op, AST_Node *rhs) {
 }
 
 AST_NodeUnOp *alloc_unop_node(AST_Node *expr, UnaryOp op) {
-    AST_NodeUnOp *unop_node = (AST_NodeUnOp*)malloc(sizeof(AST_NodeUnOp));
+    AST_NodeUnOp *unop_node = malloc(sizeof(AST_NodeUnOp));
     assert(unop_node != NULL && "Memory allocation failed");
 
     unop_node->kind = AST_UNOP;
@@ -140,7 +148,7 @@ AST_NodeUnOp *alloc_unop_node(AST_Node *expr, UnaryOp op) {
 }
 
 AST_NodeName *alloc_name_node(String_View sv) {
-    AST_NodeName *name_node = (AST_NodeName*)malloc(sizeof(AST_NodeName));
+    AST_NodeName *name_node = malloc(sizeof(AST_NodeName));
     assert(name_node != NULL && "Memory allocation failed");
 
     name_node->kind = AST_NAME;
@@ -150,7 +158,7 @@ AST_NodeName *alloc_name_node(String_View sv) {
 }
 
 AST_Type *alloc_basic_type_node(String_View sv) {
-    AST_Type *type = (AST_Type*)malloc(sizeof(AST_Type));
+    AST_Type *type = malloc(sizeof(AST_Type));
     assert(type != NULL && "Memory allocation failed");
 
     type->kind = AST_TYPE;
@@ -163,7 +171,7 @@ AST_Type *alloc_basic_type_node(String_View sv) {
 }
 
 AST_NodeCall *alloc_call_node(AST_Node *node, AST_Args args) {
-    AST_NodeCall *call_node = (AST_NodeCall*)malloc(sizeof(AST_NodeCall));
+    AST_NodeCall *call_node = malloc(sizeof(AST_NodeCall));
     assert(call_node != NULL && "Memory allocation failed");
 
     call_node->kind = AST_CALL;
@@ -174,7 +182,7 @@ AST_NodeCall *alloc_call_node(AST_Node *node, AST_Args args) {
 }
 
 AST_NodeIndex *alloc_index_node(AST_Node *node, AST_Node *index) {
-    AST_NodeIndex *index_node = (AST_NodeIndex*)malloc(sizeof(AST_NodeIndex));
+    AST_NodeIndex *index_node = malloc(sizeof(AST_NodeIndex));
     assert(index_node != NULL && "Memory allocation failed");
 
     index_node->kind = AST_INDEX;
@@ -185,7 +193,7 @@ AST_NodeIndex *alloc_index_node(AST_Node *node, AST_Node *index) {
 }
 
 AST_NodeInit *alloc_struct_expr_node(AST_Node *node, AST_InitializerList initializer) {
-    AST_NodeInit *init_node = (AST_NodeInit*)malloc(sizeof(AST_NodeInit));
+    AST_NodeInit *init_node = malloc(sizeof(AST_NodeInit));
     assert(init_node != NULL && "Memory allocation failed");
 
     init_node->kind = AST_STRUCT;
@@ -196,7 +204,7 @@ AST_NodeInit *alloc_struct_expr_node(AST_Node *node, AST_InitializerList initial
 }
 
 AST_NodeMemberAccess *alloc_member_access_node(AST_Node *node, AST_Node *member) {
-    AST_NodeMemberAccess *init_node = (AST_NodeMemberAccess*)malloc(sizeof(AST_NodeMemberAccess));
+    AST_NodeMemberAccess *init_node = malloc(sizeof(AST_NodeMemberAccess));
     assert(init_node != NULL && "Memory allocation failed");
 
     init_node->kind = AST_MEMBER_ACCESS;
@@ -206,8 +214,19 @@ AST_NodeMemberAccess *alloc_member_access_node(AST_Node *node, AST_Node *member)
     return init_node;
 }
 
+AST_NodeCast *alloc_cast_node(AST_Node *node, AST_Type *type) {
+    AST_NodeCast *cast_node = malloc(sizeof(AST_NodeCast));
+    assert(cast_node != NULL && "Memory allocation failed");
+
+    cast_node->kind = AST_CAST;
+    cast_node->base = node;
+    cast_node->type = type;
+    
+    return cast_node;
+}
+
 AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node *body, AST_Type *ret_type, bool is_static) {
-    AST_NodeFuncDecl *func_node = (AST_NodeFuncDecl*)malloc(sizeof(AST_NodeFuncDecl));
+    AST_NodeFuncDecl *func_node = malloc(sizeof(AST_NodeFuncDecl));
     assert(func_node != NULL && "Memory allocation failed");
 
     func_node->kind = AST_FUNC_DECL;
@@ -221,7 +240,7 @@ AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node 
 }
 
 AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST_Nodes funcs) {
-    AST_NodeStructDecl *struct_node = (AST_NodeStructDecl*)malloc(sizeof(AST_NodeStructDecl));
+    AST_NodeStructDecl *struct_node = malloc(sizeof(AST_NodeStructDecl));
     assert(struct_node != NULL && "Memory allocation failed");
 
     struct_node->kind = AST_STRUCT_DECL;
@@ -232,8 +251,19 @@ AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST
     return struct_node;
 }
 
+AST_NodeEnumDecl *alloc_enum_node(String_View name, AST_EnumMembers members) {
+    AST_NodeEnumDecl *enum_node = malloc(sizeof(AST_NodeEnumDecl));
+    assert(enum_node != NULL && "Memory allocation failed");
+
+    enum_node->kind = AST_ENUM_DECL;
+    enum_node->name = name;
+    enum_node->members = members;
+    
+    return enum_node;
+}
+
 AST_NodeLetStmt *alloc_let_node(String_View name, AST_Type *type, AST_Node *initializer, bool constant) {
-    AST_NodeLetStmt *let_node = (AST_NodeLetStmt*)malloc(sizeof(AST_NodeLetStmt));
+    AST_NodeLetStmt *let_node = malloc(sizeof(AST_NodeLetStmt));
     assert(let_node != NULL && "Memory allocation failed");
 
     let_node->kind = AST_LET;
@@ -246,7 +276,7 @@ AST_NodeLetStmt *alloc_let_node(String_View name, AST_Type *type, AST_Node *init
 }
 
 AST_NodeForStmt *alloc_for_node(AST_Node *initializer, AST_Node *condition, AST_Node *next, AST_Node *body) {
-    AST_NodeForStmt *for_node = (AST_NodeForStmt*)malloc(sizeof(AST_NodeForStmt));
+    AST_NodeForStmt *for_node = malloc(sizeof(AST_NodeForStmt));
     assert(for_node != NULL && "Memory allocation failed");
 
     for_node->kind = AST_FOR;
@@ -259,7 +289,7 @@ AST_NodeForStmt *alloc_for_node(AST_Node *initializer, AST_Node *condition, AST_
 }
 
 AST_NodeArray *alloc_arr_node(AST_Nodes nodes) {
-    AST_NodeArray *arr_node = (AST_NodeArray*)malloc(sizeof(AST_NodeArray));
+    AST_NodeArray *arr_node = malloc(sizeof(AST_NodeArray));
     assert(arr_node != NULL && "Memory allocation failed");
 
     arr_node->kind = AST_ARR;
@@ -269,7 +299,7 @@ AST_NodeArray *alloc_arr_node(AST_Nodes nodes) {
 }
 
 AST_NodeBlock *alloc_block_node(AST_Nodes nodes, AST_Node *ret_expr) {
-    AST_NodeBlock *block_node = (AST_NodeBlock*)malloc(sizeof(AST_NodeBlock));
+    AST_NodeBlock *block_node = malloc(sizeof(AST_NodeBlock));
     assert(block_node != NULL && "Memory allocation failed");
 
     block_node->kind = AST_BLOCK;
@@ -280,7 +310,7 @@ AST_NodeBlock *alloc_block_node(AST_Nodes nodes, AST_Node *ret_expr) {
 }
 
 AST_NodeBranch *alloc_branch_node(AST_Node *condition, AST_Node *body, AST_Nodes elif_branches, AST_Node *else_branch) {
-    AST_NodeBranch *branch_node = (AST_NodeBranch*)malloc(sizeof(AST_NodeBranch));
+    AST_NodeBranch *branch_node = malloc(sizeof(AST_NodeBranch));
     assert(branch_node != NULL && "Memory allocation failed");
 
     branch_node->kind = AST_IF;
@@ -293,7 +323,7 @@ AST_NodeBranch *alloc_branch_node(AST_Node *condition, AST_Node *body, AST_Nodes
 }
 
 AST_NodeProgram *alloc_program_node(AST_Nodes nodes) {
-    AST_NodeProgram *program_node = (AST_NodeProgram*)malloc(sizeof(AST_NodeProgram));
+    AST_NodeProgram *program_node = malloc(sizeof(AST_NodeProgram));
     assert(program_node != NULL && "Memory allocation failed");
 
     program_node->kind = AST_PROGRAM;
@@ -303,7 +333,7 @@ AST_NodeProgram *alloc_program_node(AST_Nodes nodes) {
 }
 
 AST_NodeContinue *alloc_continue_signal() {
-    AST_NodeContinue *sig = (AST_NodeContinue*)malloc(sizeof(AST_NodeContinue));
+    AST_NodeContinue *sig = malloc(sizeof(AST_NodeContinue));
     assert(sig != NULL && "Memory allocation failed");
 
     sig->kind = AST_CONTINUE;
@@ -312,7 +342,7 @@ AST_NodeContinue *alloc_continue_signal() {
 }
 
 AST_NodeBreak *alloc_break_signal() {
-    AST_NodeBreak *sig = (AST_NodeBreak*)malloc(sizeof(AST_NodeBreak));
+    AST_NodeBreak *sig = malloc(sizeof(AST_NodeBreak));
     assert(sig != NULL && "Memory allocation failed");
 
     sig->kind = AST_BREAK;
@@ -321,7 +351,7 @@ AST_NodeBreak *alloc_break_signal() {
 }
 
 AST_NodeReturn *alloc_return_signal(AST_Node *node) {
-    AST_NodeReturn *sig = (AST_NodeReturn*)malloc(sizeof(AST_NodeReturn));
+    AST_NodeReturn *sig = malloc(sizeof(AST_NodeReturn));
     assert(sig != NULL && "Memory allocation failed");
 
     sig->kind = AST_RETURN;
@@ -331,7 +361,7 @@ AST_NodeReturn *alloc_return_signal(AST_Node *node) {
 }
 
 AST_Type *alloc_arr_type_node(AST_Type *el_type) {
-    AST_Type *type = (AST_Type*)malloc(sizeof(AST_Type));
+    AST_Type *type = malloc(sizeof(AST_Type));
     assert(type != NULL && "Memory allocation failed");
 
     type->kind = AST_TYPE;
@@ -480,6 +510,8 @@ Precedence get_precedence(Token tok) {
                 prec.val = 7;
                 prec.right_associative = true;
             } break;
+
+            default: assert(0 && "UNREACHABLE");
         }
     }
     else if (is_unop(tok)) {
@@ -494,6 +526,13 @@ Precedence get_precedence(Token tok) {
                 prec.val = 6;
                 prec.right_associative = false;
             } break;
+
+            case UNOP_REF: {
+                prec.val = 8;
+                prec.right_associative = false;
+            }
+
+            default: assert(0 && "UNREACHABLE");
         }
     }
 
@@ -594,7 +633,6 @@ ParserError parse_char(Lexer *l, AST_Node **ret) {
     }
     
     if (l->cur.val.count > 1 && c < 0) {
-        lexer_next(l);
         return PERROR_MULTI_CHARACTER_CHAR_LIT;
     }
     
@@ -1251,6 +1289,25 @@ ParserError parse_member_access_expr(Lexer *l, AST_Node *node, AST_Node **ret) {
     return PERROR_NONE;
 }
 
+ParserError parse_cast_expr(Lexer *l, AST_Node *node, AST_Node **ret) {
+    if (l->cur.kind != TOKEN_AS) {
+        return PERROR_UNEXPECTED_TOKEN;
+    }
+
+    lexer_next(l);
+        
+    AST_Node *type_node;
+    ParserError err = parse_type(l, &type_node);
+    if (err != PERROR_NONE) {
+        return err;
+    }
+
+    node = (void*)alloc_cast_node(node, (void*)type_node);
+
+    *ret = node;
+    return PERROR_NONE;
+}
+
 ParserError parse_postfix_expr(Lexer *l, AST_Node *node, AST_Node **ret) {
     ParserError err = PERROR_NONE;
     bool proceed = true;
@@ -1269,6 +1326,10 @@ ParserError parse_postfix_expr(Lexer *l, AST_Node *node, AST_Node **ret) {
 
             case TOKEN_DOT: {
                 err = parse_member_access_expr(l, *ret, ret);
+            } break;
+
+            case TOKEN_AS: {
+                err = parse_cast_expr(l, *ret, ret);
             } break;
             
             default: {
@@ -1611,7 +1672,11 @@ ParserError parse_struct_item(Lexer *l, AST_Node **ret) {
                 da_append(&funcs, (void*)func);
             } break;
 
-            default: return PERROR_UNEXPECTED_TOKEN;
+            default: {
+                ast_patterns_free(fields);
+                ast_nodes_free(funcs);
+                return PERROR_UNEXPECTED_TOKEN;
+            }
         }
     }
     
@@ -1622,6 +1687,89 @@ ParserError parse_struct_item(Lexer *l, AST_Node **ret) {
     lexer_next(l);
 
     *ret = (void*)alloc_struct_node(name_sv, fields, funcs);
+    return PERROR_NONE; 
+}
+
+ParserError parse_enum_item(Lexer *l, AST_Node **ret) {
+    assert(l->cur.kind == TOKEN_KW_ENUM);
+
+    lexer_next(l);
+
+    if (l->cur.kind != TOKEN_NAME) {
+        lexer_next(l);
+        return PERROR_UNEXPECTED_TOKEN;
+    }
+
+    String_View name_sv = l->cur.val;
+
+    lexer_next(l);
+    
+    if (l->cur.kind != TOKEN_LBRACE) {
+        return PERROR_UNEXPECTED_TOKEN;
+    }
+
+    lexer_next(l);
+    
+    AST_EnumMembers members = {0};
+    
+    while (l->cur.kind != TOKEN_RBRACE) {
+        if (l->cur.kind == TOKEN_EOF) {
+            ast_enum_members_free(members);
+            return PERROR_UNEXPECTED_EOF;
+        }
+
+        if (l->cur.kind != TOKEN_NAME) {
+            ast_enum_members_free(members);
+            return PERROR_UNEXPECTED_TOKEN;
+        }
+
+        String_View member_name_sv = l->cur.val;
+
+        lexer_next(l);
+        
+        if (l->cur.kind != TOKEN_COLON) {
+            AST_EnumMember member = {
+                .name = member_name_sv,
+                .initializer = NULL,
+            };
+        
+            da_append(&members, member);
+            continue;
+        }
+
+        lexer_next(l);
+        
+        AST_Node *initializer = NULL;
+        ParserError err = parse_expr(l, 0, &initializer);
+
+        if (err != PERROR_NONE) {
+            ast_enum_members_free(members);
+            return err;
+        }
+
+        AST_EnumMember member = {
+            .name = member_name_sv,
+            .initializer = initializer,
+        };
+        
+        da_append(&members, member);
+
+        if (l->cur.kind == TOKEN_COMMA) {
+            lexer_next(l);
+        }
+    }
+    
+    if (l->cur.kind != TOKEN_RBRACE) {
+        return PERROR_UNEXPECTED_TOKEN;
+    }
+
+    lexer_next(l);
+
+    if (members.count <= 0) {
+        return PERROR_TOO_FEW_ENUM_MEMBERS;
+    }
+    
+    *ret = (void*)alloc_enum_node(name_sv, members);
     return PERROR_NONE; 
 }
 
@@ -1799,6 +1947,14 @@ ParserError parse_item(Lexer *l, AST_Node **ret) {
             }
             
             err = parse_struct_item(l, &node);
+        } break;
+
+        case TOKEN_KW_ENUM: {
+            if (is_static) {
+                return PERROR_UNEXPECTED_TOKEN;
+            }
+            
+            err = parse_enum_item(l, &node);
         } break;
 
         case TOKEN_KW_CONST: {

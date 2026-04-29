@@ -18,8 +18,7 @@ const Type int_symb = (Type){
     .name = &int_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(INT_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -27,8 +26,7 @@ const Type float_symb = (Type){
     .name = &float_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(FLOAT_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -36,8 +34,7 @@ const Type bool_symb = (Type){
     .name = &bool_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(BOOL_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -45,8 +42,7 @@ const Type char_symb = (Type){
     .name = &char_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(CHAR_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -54,8 +50,7 @@ const Type str_symb = (Type){
     .name = &str_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(STR_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -63,8 +58,7 @@ const Type any_symb = (Type){
     .name = &any_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = sizeof(PTR_CTYPE),
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -72,8 +66,7 @@ const Type void_symb = (Type){
     .name = &void_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_PRIMITIVE,
-    .size = 0,
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -81,9 +74,8 @@ const Type variadic_symb = (Type){
     .name = &variadic_sb,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_ARRAY,
-    .size = sizeof(Array),
     .el_type = NULL,
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
@@ -91,52 +83,75 @@ const Type array_any_symb = (Type){
     .name = NULL,
     .symb_kind = SYMB_TYPE,
     .kind = TYPE_ARRAY,
-    .size = sizeof(Array),
     .el_type = ANY_TYPE,
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
 const Type array_va_symb = (Type){
     .name = NULL,
     .symb_kind = SYMB_TYPE,
-    .size = sizeof(Array),
     .el_type = VARIADIC_TYPE,
-    .members = {0},
+    .members = NULL,
     .constant = true,
 };
 
 #define IS_INTLIKE(t) ((t)==INT_TYPE||(t)==BOOL_TYPE||(t)==CHAR_TYPE)
 #define FIELD_ADDR(struct_addr, offset) ((char*)struct_addr + offset)
 
-size_t hash_type(Type *t);
+size_t hash_enum(Type *t);
 size_t hash_member(Member *member) {
     size_t h = 0;
 
     h = hash_combine(h, member->kind);
-    h = hash_combine(h, hash_type(member->type));
+    hash_combine(h, (size_t)member->type);
+    
     if (member->name != NULL && member->name->count > 0) {
-        h = hash_combine(h, hash_nkey((unsigned char*)member->name->items, member->name->count));
+        h = hash_combine(h, hash_sb(member->name));
     }
     
     return h;
 }
 
-size_t hash_members(Members members) {
+size_t hash_members(Members *members) {
     size_t h = 0;
 
-    for (size_t i = 0; i < members.count; ++i) {
-        h = hash_combine(h, hash_member(members.items[i]));
+    for (size_t i = 0; i < members->count; ++i) {
+        size_t member_hash = hash_member(members->items[i]);
+        h = hash_combine(h, member_hash);
     }
 
     return h;
 }
 
+size_t hash_enum(Type *t) {
+    size_t h = 0;
+    
+    h = hash_combine(h, t->kind);
+
+    if (t->members != NULL) {
+        h = hash_combine(h, hash_members(t->members));
+    }
+
+    if (t->name != NULL) {
+        h = hash_combine(h, hash_sb(t->name));
+    }
+    
+    return h;
+}
+
 size_t hash_type(Type *t) {
     size_t h = 0;
-
+    
     h = hash_combine(h, t->kind);
-    h = hash_combine(h, hash_members(t->members));
+
+    if (t->members != NULL) {
+        h = hash_combine(h, hash_members(t->members));
+    }
+    
+    if (t->name != NULL) {
+        h = hash_combine(h, hash_sb(t->name));
+    }
     
     if (t->el_type != NULL) {
         h = hash_combine(h, hash_type(t->el_type));
@@ -153,7 +168,7 @@ size_t hash_patterns(Patterns patterns) {
         h = hash_combine(h, hash_type(pattern.type));
         
         if (pattern.name != NULL && pattern.name->count > 0) {
-            h = hash_combine(h, hash_nkey((unsigned char*)pattern.name->items, pattern.name->count));
+            h = hash_combine(h, hash_sb(pattern.name));
         }
     }
 
@@ -165,7 +180,7 @@ size_t hash_func(Func *f) {
 
     h = hash_combine(h, f->kind);
     if (f->name->count > 0) {
-        h = hash_combine(h, hash_nkey((unsigned char*)f->name->items, f->name->count));
+        h = hash_combine(h, hash_sb(f->name));
     }
     
     h = hash_combine(h, hash_patterns(f->args));
@@ -173,28 +188,14 @@ size_t hash_func(Func *f) {
 }
 
 bool get_type_field(Type *type, String_View name, Member **field) {
-    for (size_t i = 0; i < type->members.count; ++i) {
-        if (sv_cmp_sb(&name, type->members.items[i]->name)) {
-            *field = type->members.items[i];
+    for (size_t i = 0; i < type->members->count; ++i) {
+        if (sv_cmp_sb(&name, type->members->items[i]->name)) {
+            *field = type->members->items[i];
             return true;
         }
     }
 
     return false;
-}
-
-void alloc_type_value(Value *val, Type *type) {
-    val->type = type;
-    
-    if (type->kind == TYPE_ARRAY) {
-        val->as_ptr = alloc_array_value(type->el_type);
-    }
-    else if (type->kind == TYPE_STRUCT) {
-        val->as_struct = alloc_struct_value(type);
-    }
-    else if (type == STR_TYPE) {
-        val->as_ptr = calloc(1, sizeof(STR_CTYPE));
-    }
 }
 
 Array *alloc_array_value(Type *el_type) {
@@ -211,8 +212,8 @@ Struct alloc_struct_value(Type *type) {
         .members = hm_alloc(),
     };
 
-    for (size_t i = 0; i < type->members.count; ++i) {
-        Member *member = type->members.items[i];
+    for (size_t i = 0; i < type->members->count; ++i) {
+        Member *member = type->members->items[i];
         Value val = create_value(member->type);
         alloc_type_value(&val, member->type);
         hm_put_hashed(strct.members, hash_member(member), alloc_value(val));
@@ -222,9 +223,26 @@ Struct alloc_struct_value(Type *type) {
     return strct;
 }
 
+void alloc_type_value(Value *val, Type *type) {
+    *val = create_value(type);
+    
+    if (type->kind == TYPE_ARRAY) {
+        val->as_ptr = alloc_array_value(type->el_type);
+    }
+    else if (type->kind == TYPE_STRUCT) {
+        val->as_struct = alloc_struct_value(type);
+    }
+    else if (type->kind == TYPE_ENUM) {
+        
+    }
+    else if (type == STR_TYPE) {
+        val->as_ptr = calloc(1, sizeof(STR_CTYPE));
+    }
+}
+
 bool get_member(Type *type, String_View *name_sv, Member **member) {
-    for (size_t i = 0; i < type->members.count; ++i) {
-        Member *m = type->members.items[i];
+    for (size_t i = 0; i < type->members->count; ++i) {
+        Member *m = type->members->items[i];
 
         if (m->name != NULL && sv_cmp_sb(name_sv, m->name)) {
             *member = m;
@@ -306,13 +324,13 @@ Value copy_value(Value *value) {
         case TYPE_PRIMITIVE: {
             return *value;
         }
-
+        
         case TYPE_STRUCT: {
             Value val = create_value(value->type);
             val.as_struct = alloc_struct_value(value->type);
 
-            for (size_t i = 0; i < value->type->members.count; ++i) {
-                Member *member = value->type->members.items[i];
+            for (size_t i = 0; i < value->type->members->count; ++i) {
+                Member *member = value->type->members->items[i];
                 size_t hash = hash_member(member);
 
                 Value *src = hm_get_hashed(value->as_struct.members, hash);
@@ -322,9 +340,24 @@ Value copy_value(Value *value) {
 
             return val;
         }
-    }
 
-    assert(0 && "UNREACHABLE");
+        case TYPE_ENUM: {
+            Value val = *value;
+            if (val.type->el_type == NULL) {
+                Member *member = val.type->members->items[0];
+                assert(member->is_static && member->kind == MEMBER_FIELD);
+                return copy_value(member->field.static_initializer);
+            }
+            
+            val.type = val.type->el_type;
+
+            val = copy_value(&val);
+            val.type = value->type;
+            return val;
+        }
+
+        default: assert(0 && "UNREACHABLE");
+    }
 }
 
 void assign_field(Context *ctx, Struct strct, Member *member, Value val) {
@@ -346,18 +379,73 @@ void assign_field(Context *ctx, Struct strct, Member *member, Value val) {
     *field_val = copy_value(&value);
 }
 
-Type *alloc_struct_type(String_Builder *name_sb, Members members) {
+Type *alloc_struct_type(String_Builder *name_sb, Members *members, bool initialized) {
     Type *type = (Type*)calloc(1, sizeof(Type));
     assert(type != NULL && "Failed to allocate type");
+
+    if (members == NULL) {
+        members = calloc(1, sizeof(Members));
+    }
     
     *type = (Type){
         .name = name_sb,
         .symb_kind = SYMB_TYPE,
         .constant = true,
         .kind = TYPE_STRUCT,
-        .size = sizeof(Value) * members.count,
         .el_type = NULL,
         .members = members,
+        .initialized = initialized,
+    };
+
+    return type;
+}
+
+Type *alloc_enum_el_type(Context *ctx, Type *t, Type *enum_type) {
+    Type tmp = {
+        .kind = TYPE_ENUM,
+        .name = enum_type->name,
+        .members = enum_type->members,
+        .el_type = t,
+    };
+    
+    size_t h = hash_type(&tmp);
+    Type *type = hm_get_hashed(ctx->type_cache.enum_cache, h);
+    if (type != NULL) {
+        return type;
+    }
+    
+    type = (Type*)calloc(1, sizeof(Type));
+    assert(type != NULL && "Failed to allocate type");
+    
+    *type = (Type){
+        .name = enum_type->name,
+        .symb_kind = SYMB_TYPE,
+        .constant = true,
+        .kind = TYPE_ENUM,
+        .el_type = t,
+        .members = enum_type->members,
+        .initialized = enum_type->initialized,
+    };
+
+    return type;
+}
+
+Type *alloc_enum_type(String_Builder *name_sb, Members *members, bool initialized) {
+    Type *type = (Type*)calloc(1, sizeof(Type));
+    assert(type != NULL && "Failed to allocate type");
+
+    if (members == NULL) {
+        members = calloc(1, sizeof(Members));
+    }
+    
+    *type = (Type){
+        .name = name_sb,
+        .symb_kind = SYMB_TYPE,
+        .constant = true,
+        .kind = TYPE_ENUM,
+        .el_type = NULL,
+        .members = members,
+        .initialized = initialized,
     };
 
     return type;
@@ -378,9 +466,8 @@ Type *alloc_ref_type(Context *ctx, Type *t) {
         .symb_kind = SYMB_TYPE,
         .constant = true,
         .kind = TYPE_REF,
-        .size = sizeof(PTR_CTYPE),
         .el_type = t,
-        .members = (Members){0},
+        .members = NULL,
     };
 
     hm_put_hashed(ctx->type_cache.ref_cache, h, type);
@@ -402,9 +489,8 @@ Type *alloc_type_type(Context *ctx, Type *t) {
         .symb_kind = SYMB_TYPE,
         .constant = true,
         .kind = TYPE_TYPE,
-        .size = sizeof(Func),
         .el_type = t,
-        .members = (Members){0},
+        .members = NULL,
     };
 
     hm_put_hashed(ctx->type_cache.type_cache, h, type);
@@ -426,9 +512,8 @@ Type *alloc_func_type(Context *ctx, Func *func) {
         .symb_kind = SYMB_TYPE,
         .constant = true,
         .kind = TYPE_FUNC,
-        .size = sizeof(Func),
         .el_type = NULL,
-        .members = (Members){0},
+        .members = NULL,
         .func = func,
     };
 
@@ -440,7 +525,6 @@ Type *alloc_array_type(Context *ctx, Type *el_type) {
     Type tmp = {
         .kind = TYPE_ARRAY,
         .el_type = el_type,
-        .members = {0}
     };
     
     size_t h = hash_type(&tmp);
@@ -461,9 +545,8 @@ Type *alloc_array_type(Context *ctx, Type *el_type) {
         .symb_kind = SYMB_TYPE,
         .constant = true,
         .kind = TYPE_ARRAY,
-        .size = sizeof(Array),
         .el_type = el_type,
-        .members = (Members){0},
+        .members = NULL,
     };
 
     hm_put_hashed(ctx->type_cache.array_cache, h, type);
@@ -631,16 +714,16 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
             Struct strct = val.as_struct;
 
             size_t fields_count = 0;
-            for (size_t i = 0; i < val.type->members.count; ++i) {
-                Member *member = val.type->members.items[i];
+            for (size_t i = 0; i < val.type->members->count; ++i) {
+                Member *member = val.type->members->items[i];
                 if (member->kind == MEMBER_FIELD) {
                     ++fields_count;
                 }
             }
 
             size_t fields_printed = 0;
-            for (size_t i = 0; i < val.type->members.count; ++i) {
-                Member *member = val.type->members.items[i];
+            for (size_t i = 0; i < val.type->members->count; ++i) {
+                Member *member = val.type->members->items[i];
                 if (member->kind == MEMBER_METHOD) {
                     continue;
                 }
@@ -666,6 +749,20 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
             }
             
             sb_appendc(sb, '}');
+        } break;
+
+        case TYPE_ENUM: {
+            Type *type = val.type;
+            
+            sb_append_sb(sb, type->name);
+            if (type->el_type == NULL) {
+                break;
+            }
+            
+            sb_appendc(sb, '.');
+
+            Member *member = type->members->items[type->member_index];
+            sb_append_sb(sb, member->name);
         } break;
 
         case TYPE_FUNC: {
@@ -738,6 +835,16 @@ INT_CTYPE to_int(Context *ctx, Value val) {
             append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
             return 0;
         }
+
+        case TYPE_ENUM: {
+            if (val.type->el_type == NULL) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return 0;
+            }
+
+            val.type = val.type->el_type;
+            return to_int(ctx, val);
+        }
             
         default: {
             append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
@@ -768,6 +875,17 @@ FLOAT_CTYPE to_float(Context *ctx, Value val) {
             append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
             return 0.0;
         }
+
+        case TYPE_ENUM: {
+            if (val.type->el_type == NULL) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return 0.0;
+            }
+
+            val.type = val.type->el_type;
+            return to_float(ctx, val);
+        }
+            
         default: {
             append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
             return 0.0;
@@ -797,11 +915,21 @@ BOOL_CTYPE to_bool(Context *ctx, Value val) {
             if (val.type == VOID_TYPE) {
                 return false;
             }
-
+            
             append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
             return false;
         }
 
+        case TYPE_ENUM: {
+            if (val.type->el_type == NULL) {
+                append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
+                return 0;
+            }
+
+            val.type = val.type->el_type;
+            return to_bool(ctx, val);
+        }
+            
         case TYPE_ARRAY: {
             Array *arr = val.as_ptr;
             return arr != NULL && arr->count != 0;
@@ -821,6 +949,10 @@ bool compatible_types(Type *type_1, Type *type_2) {
     
     switch (type_1->kind) {
         case TYPE_PRIMITIVE: {
+            if (type_2->kind == TYPE_ENUM && type_2->el_type != NULL) {
+                type_2 = type_2->el_type;
+            }
+            
             if (IS_INTLIKE(type_1) || type_1 == FLOAT_TYPE || type_1 == VOID_TYPE) {
                 return IS_INTLIKE(type_2) || type_2 == FLOAT_TYPE || type_2 == VOID_TYPE || type_2 == STR_TYPE;
             }
@@ -829,6 +961,13 @@ bool compatible_types(Type *type_1, Type *type_2) {
             }
         } break;
 
+        case TYPE_ENUM: {
+            size_t type_1_hash = hash_enum(type_1);
+            size_t type_2_hash = hash_enum(type_2);
+            
+            return type_1_hash == type_2_hash;
+        }
+            
         case TYPE_ARRAY: {
             if (type_1->el_type == ANY_TYPE || type_2->el_type == ANY_TYPE) {
                 return true;
@@ -885,6 +1024,10 @@ Value cast_value(Context *ctx, Value val, Type *type) {
         }
 
         case TYPE_ARRAY: {
+            while (val.type->kind == TYPE_REF) {
+                val = *(Value*)val.as_ptr;
+            }
+            
             if (val.type->kind != TYPE_ARRAY) {
                 append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
                 return casted;
@@ -908,7 +1051,37 @@ Value cast_value(Context *ctx, Value val, Type *type) {
                 append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
                 return val;
             }
+            
+            return val;
+        }
 
+        case TYPE_ENUM: {
+            while (val.type->kind == TYPE_REF) {
+                val = *(Value*)val.as_ptr;
+            }
+            
+            size_t type_hash = hash_enum(type);
+            size_t val_hash = hash_enum(val.type);
+            
+            if (type_hash != val_hash) {
+                INT_CTYPE index = to_int(ctx, val);
+                if (has_errors(ctx)) {
+                    return val;
+                }
+
+                if (index < 0 || index >= type->members->count) {
+                    append_error(ctx, ERROR_OUT_OF_BOUNDS);
+                    return val;
+                }
+
+                Member *member = type->members->items[index];
+                if (member->kind != MEMBER_FIELD && !member->is_static) {
+                    append_error(ctx, ERROR_OUT_OF_BOUNDS);
+                }
+                
+                return *member->field.static_initializer;
+            }
+            
             return val;
         }
 

@@ -53,7 +53,7 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
         return;
     }
     
-    Var *func_args = (Var*)malloc( sizeof(Var) * func->args.count);
+    Var *func_args = (Var*)malloc(sizeof(Var) * func->args.count);
 
     Value va_args = create_value(VARIADIC_TYPE);
     if (HAS_VARIADIC(func)) {
@@ -142,7 +142,7 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
 }
 
 static size_t recursion_depth = 0;
-static const size_t max_recursion_depth = 1024;
+static const size_t max_recursion_depth = 512;
 
 Value exec_func(Context *ctx, Func *func, AST_Args args) {
     EvalResult result = create_result(VOID_TYPE);
@@ -164,16 +164,17 @@ Value exec_func(Context *ctx, Func *func, AST_Args args) {
         return result.val;
     }
     
-    HashMap *local_symbols = hm_copy(ctx->global->scope.symbols);
+    HashMap *local_names = hm_copy(ctx->global->scope.names);
             
     for (size_t i = 0; i < func->args.count; ++i) {
-        assert(hm_nput(local_symbols, unwrapped[i].name->items, unwrapped[i].name->count, &unwrapped[i]) == 0);
+        assert(hm_nput(local_names, unwrapped[i].name->items, unwrapped[i].name->count, &unwrapped[i]) == 0);
     }
 
     Context local_context = {
         .global = ctx->global,
         .scope = (Scope){
-            .symbols = local_symbols,
+            .names = local_names,
+            .types = ctx->scope.types
         },
         .errors = ctx->errors,
         .type_cache = ctx->type_cache,
@@ -195,13 +196,12 @@ Value exec_func(Context *ctx, Func *func, AST_Args args) {
 
             result.val = cast_value(ctx, result.val, custom_func->ret_type);
             
-            hm_free(local_symbols);
+            hm_free(local_names);
         } break;
     }
 
     --recursion_depth;
-
-    // TODO: FIX leak of memory allocated for va args and arrays
+    
     free(unwrapped);
     return result.val;
 }
@@ -234,13 +234,13 @@ Value format_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(STR_TYPE);
     
     Var *fmt;
-    if (!resolve_name_cstr(fn_ctx, "msg", &fmt)) {
+    if (!resolve_name_cstr(fn_ctx, "msg", (void*)&fmt)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
     
     Var *va_args;
-    if (!resolve_name_cstr(fn_ctx, "args", &va_args)) {
+    if (!resolve_name_cstr(fn_ctx, "args", (void*)&va_args)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -259,7 +259,7 @@ Value read_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(CHAR_TYPE);
 
     Var *intercept;
-    if (!resolve_name_cstr(fn_ctx, "intercept", &intercept)) {
+    if (!resolve_name_cstr(fn_ctx, "intercept", (void*)&intercept)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -289,7 +289,7 @@ Value readln_func(Context *ctx, Context *fn_ctx) {
     ret.as_ptr = sb_alloc();
 
     Var *intercept;
-    if (!resolve_name_cstr(fn_ctx, "intercept", &intercept)) {
+    if (!resolve_name_cstr(fn_ctx, "intercept", (void*)&intercept)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -321,6 +321,12 @@ Value read_key_func(Context *ctx, Context *fn_ctx) {
     return ret;
 }
 
+Value key_pressed_func(Context *ctx, Context *fn_ctx) {
+    Value ret = create_value(BOOL_TYPE);
+    ret.as_int = key_pressed();
+    return ret;
+}
+
 Value clear_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(VOID_TYPE);
     printf("\x1b[2J\x1b[3J\x1b[H");
@@ -328,17 +334,30 @@ Value clear_func(Context *ctx, Context *fn_ctx) {
     return ret;
 }
 
+Value sleep_func(Context *ctx, Context *fn_ctx) {
+    Value ret = create_value(VOID_TYPE);
+
+    Var *ms;
+    if (!resolve_name_cstr(fn_ctx, "ms", (void*)&ms)) {
+        append_error(ctx, ERROR_NOT_DEFINED);
+        return ret;
+    }
+    
+    sleep_ms(ms->val->as_int);
+    return ret;
+}
+
 Value move_cursor_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(VOID_TYPE);
 
     Var *col;
-    if (!resolve_name_cstr(fn_ctx, "column", &col)) {
+    if (!resolve_name_cstr(fn_ctx, "column", (void*)&col)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
     Var *row;
-    if (!resolve_name_cstr(fn_ctx, "row", &row)) {
+    if (!resolve_name_cstr(fn_ctx, "row", (void*)&row)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -352,7 +371,7 @@ Value trim(Context *ctx, Context *fn_ctx, trim_fn trim_fn) {
     Value ret = create_value(STR_TYPE);
     
     Var *str;
-    if (!resolve_name_cstr(fn_ctx, "string", &str)) {
+    if (!resolve_name_cstr(fn_ctx, "string", (void*)&str)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -383,7 +402,7 @@ Value arr_len_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(INT_TYPE);
     
     Var *arr;
-    if (!resolve_name_cstr(fn_ctx, "arr", &arr)) {
+    if (!resolve_name_cstr(fn_ctx, "arr", (void*)&arr)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -397,13 +416,13 @@ Value arr_len_func(Context *ctx, Context *fn_ctx) {
 Value randint_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(INT_TYPE);
     
-    Var *min;
+    Symbol *min;
     if (!resolve_name_cstr(fn_ctx, "min", &min)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
-    Var *max;
+    Symbol *max;
     if (!resolve_name_cstr(fn_ctx, "max", &max)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
@@ -411,35 +430,40 @@ Value randint_func(Context *ctx, Context *fn_ctx) {
 
     init_rng();
 
+    Var *min_var = (void*)min;
+    Var *max_var = (void*)max;
 
-    int rand_max = max->val->as_int - min->val->as_int + 1;
+    int rand_max = max_var->val->as_int - min_var->val->as_int + 1;
     
     if (rand_max == 0) {
         append_error(ctx, ERROR_DIV_BY_ZERO);
         return ret;
     }
     
-    ret.as_int = min->val->as_int + rand() % (max->val->as_int - min->val->as_int + 1);
+    ret.as_int = min_var->val->as_int + rand() % (max_var->val->as_int - min_var->val->as_int + 1);
     return ret;
 }
 
 Value append_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(VOID_TYPE);
 
-    Var *arr_arg;
+    Symbol *arr_arg;
     if (!resolve_name_cstr(fn_ctx, "arr", &arr_arg)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
-    Var *va_args_arg;
+    Symbol *va_args_arg;
     if (!resolve_name_cstr(fn_ctx, "elements", &va_args_arg)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
-    Array *arr = arr_arg->val->as_ptr;
-    Array *va_args = va_args_arg->val->as_ptr;
+    Var *arr_arg_var = (void*)arr_arg;
+    Var *va_args_arg_var = (void*)va_args_arg;
+    
+    Array *arr = arr_arg_var->val->as_ptr;
+    Array *va_args = va_args_arg_var->val->as_ptr;
 
     da_append_many(arr, va_args);
     return ret;
@@ -448,23 +472,26 @@ Value append_func(Context *ctx, Context *fn_ctx) {
 Value remove_at_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(ANY_TYPE);
 
-    Var *arr_arg;
+    Symbol *arr_arg;
     if (!resolve_name_cstr(fn_ctx, "arr", &arr_arg)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
-    Var *index_arg;
+    Symbol *index_arg;
     if (!resolve_name_cstr(fn_ctx, "index", &index_arg)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
 
-    Array *arr = arr_arg->val->as_ptr;
-    INT_CTYPE index = index_arg->val->as_int;
+    Var *arr_arg_var = (void*)arr_arg;
+    Var *index_arg_var = (void*)index_arg;
+    
+    Array *arr = arr_arg_var->val->as_ptr;
+    INT_CTYPE index = index_arg_var->val->as_int;
 
     if (index < 0 || index >= arr->count) {
-        append_error(ctx, ERROR_INDEX_OUT_OF_BOUNDS);
+        append_error(ctx, ERROR_OUT_OF_BOUNDS);
         return ret;
     }
 

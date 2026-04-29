@@ -82,21 +82,52 @@ void enable_raw_mode() {
 #endif
 }
 
-int read_key() {
+bool key_pressed() {
+#if defined(_WIN32)
+    return _kbhit();
+#endif
+#if defined(__unix__) || defined(__unix) || defined(__APPLE__)
     enable_raw_mode();
     
+    struct timeval tv = {0L, 0L};
+    fd_set fds;
+
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+
+    disable_raw_mode();
+    return select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0;
+#endif
+}
+
+int read_key() {
     int c;
 
 #if defined(_WIN32)
     c = _getch();
 #endif
 #if defined(__unix__) || defined(__unix) || defined(__APPLE__)
+    enable_raw_mode();
     read(STDIN_FILENO, &c, 1);
+    disable_raw_mode();
 #endif
     
-    disable_raw_mode();
     
     return c;
+}
+
+void sleep_ms(int ms) {
+#if defined(_WIN32)
+    Sleep(ms);
+#endif
+
+#if defined(__unix__) || defined(__unix) || defined(__APPLE__)
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000L;
+
+    while (nanosleep(&ts, &ts) == -1) continue;
+#endif
 }
 
 void init_rng() {

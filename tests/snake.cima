@@ -1,20 +1,18 @@
-# TODO: Implement enums
-
-struct Cell {
-    static const Head  : char = '@'
-    static const Body  : char = '#'
-    static const Space : char = '.'
-    static const Apple : char = '%'
+enum Cell {
+    Head  : '@'
+    Body  : '#'
+    Space : '.'
+    Apple : '%'
 }
 
-struct Status {
-    static const Win  : int = 0
-    static const Lose : int = 1
+enum Status {
+    Win  : 0
+    Lose : 1
 }
 
-struct Difficulty {
-    static const Casual : int = 0
-    static const Normal : int = 1
+enum Difficulty {
+    Casual : 0
+    Normal : 1
 }
 
 struct Position {
@@ -27,13 +25,15 @@ struct Snake {
     last_pos : Position
 }
 
+struct Apple {
+    pos     : Position
+    spawned : bool
+}
+
 struct Field {
-    size : int
+    size  : int
     snake : Snake
-    apple : Position
-    appleSpawned : bool
-    
-    # TODO: Implement 'self'
+    apple : Apple
     
     func print(self: &Field) {
         const pos = @Position{}
@@ -52,8 +52,10 @@ struct Field {
 
 struct Game {
     field      : Field
-    status     : int
-    difficulty : int
+    status     : Status
+    difficulty : Difficulty
+    frame_time : int
+    move_delay : int
     debug      : bool
 }
 
@@ -66,6 +68,7 @@ println("Press any key to exit.")
 read_key()
 
 func game_init(game : &Game) {
+    const fps = 15
     const fieldSize = 8
     const initPos = @Position{
                         x: fieldSize/2,
@@ -75,10 +78,12 @@ func game_init(game : &Game) {
     game.field.size = fieldSize;
     game.field.snake.segments = [initPos]
     game.field.snake.last_pos = initPos
-    game.field.appleSpawned = false
+    game.field.apple.spawned = false
     game.status = Status.Win
     game.difficulty = Difficulty.Normal
     game.debug = false
+    game.frame_time = 1000/fps
+    game.move_delay = 500
 }
 
 func main_loop(game: &Game){
@@ -143,12 +148,14 @@ func main_loop(game: &Game){
 }
 
 func game_loop(game: &Game) {
+    let key = ' '
+    let timer = 0
     let move_x = false
     let move_snake_up = true
     let move_snake_left = true
 
     forever {
-        if !game.field.appleSpawned {
+        if !game.field.apple.spawned {
             spawn_apple(game.field)
         }
     
@@ -159,58 +166,13 @@ func game_loop(game: &Game) {
             println("{game}")
         }
         
-        let key = ' '
+        if key_pressed() {
+            key = readkey()
+        }
         
-        while key != 'w' and key != 'a' and key != 's' and key != 'd' {
-            if game.debug {            
-                const head = game.field.snake.segments[0]
-                const fieldSize = game.field.size
-                
-                if head.y == 0 or head.y == fieldSize - 1 {
-                    move_x = !move_x
-
-                    move_snake_left = if head.x == 0 {
-                        false
-                    }
-                    elif head.x == fieldSize - 1 {
-                        true
-                    }
-                    else {
-                        move_snake_left
-                    }
-                }
-                
-                move_snake_up = if head.y == 0 {
-                    false
-                }
-                elif head.y == fieldSize - 1 {
-                    true
-                }
-                else {
-                    move_snake_up
-                }
-                
-                if move_x {
-                    key = if move_snake_left {
-                        'a'
-                    }
-                    else {
-                        'd'
-                    }
-                }
-                else {
-                    key = if move_snake_up {
-                        'w'
-                    }
-                    else {
-                        's'
-                    }
-                }
-            }
-            else {
-                key = readkey()
-            }
-        
+        if timer >= game.move_delay {
+            timer = 0
+            
             if key == 'w' {
                 move_up(game.field)
             }
@@ -223,6 +185,11 @@ func game_loop(game: &Game) {
             elif key == 'd' {
                 move_right(game.field)
             }
+            else {
+                sleep(game.frame_time)
+                timer = timer + game.frame_time
+                continue
+            }
         }
         
         if game.difficulty == Difficulty.Casual {
@@ -231,8 +198,8 @@ func game_loop(game: &Game) {
         
         const head = game.field.snake.segments[0]
         
-        if head.x == game.field.apple.x and head.y == game.field.apple.y {
-            game.field.appleSpawned = false
+        if head.x == game.field.apple.pos.x and head.y == game.field.apple.pos.y {
+            game.field.apple.spawned = false
             
             append(game.field.snake.segments, @Position{game.field.snake.last_pos.x, game.field.snake.last_pos.y})
             continue
@@ -255,6 +222,9 @@ func game_loop(game: &Game) {
             game.status = Status.Lose
             return
         }
+        
+        sleep(game.frame_time)
+        timer = timer + game.frame_time
     }
 }
 
@@ -271,8 +241,7 @@ func spawn_apple(field: &Field){
         cell = get_cell(field, pos)
     }
     
-    field.apple = pos
-    field.appleSpawned = true
+    field.apple = @Apple{pos, true}
 }
 
 func get_cell(field: &Field, pos: &Position) : char {
@@ -289,7 +258,7 @@ func get_cell(field: &Field, pos: &Position) : char {
         }
     }
     
-    if field.appleSpawned and pos.x == field.apple.x and pos.y == field.apple.y {
+    if field.apple.spawned and pos.x == field.apple.pos.x and pos.y == field.apple.pos.y {
         return Cell.Apple
     }
     

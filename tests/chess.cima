@@ -1,0 +1,276 @@
+enum Color {
+    White : 1
+    Black : 2
+    None  : 0
+}
+
+enum PieceChar {
+    WKing   : 'K'
+    WQueen  : 'Q'
+    WRook   : 'R'
+    WBishop : 'B'
+    WKnight : 'N'
+    WPawn   : 'P'
+    BKing   : 'k'
+    BQueen  : 'q'
+    BRook   : 'r'
+    BBishop : 'b'
+    BKnight : 'n'
+    BPawn   : 'p'
+    Empty   : '.'
+}
+
+struct Position {
+    x : int
+    y : int
+}
+
+struct Piece {
+    icon      : char
+    color     : int
+    has_moved : bool
+}
+
+struct Chess {
+    board        : [[Piece]]
+    turn         : int
+    cursor       : Position
+    selected     : Position
+    is_selecting : bool
+    msg          : str
+}
+
+func abs(n: int) : int {
+    if n < 0 { return n * -1 }
+    return n
+}
+
+let game = @Chess{}
+chess_init(&game)
+chess_main_loop(&game)
+
+func chess_init(game: &Chess) {
+    game.turn = Color.White
+    game.cursor = @Position{x: 0, y: 7}
+    game.selected = @Position{x: -1, y: -1}
+    game.is_selecting = true
+    game.msg = "White's Turn"
+
+    for let y = 0; y < 8; ++y {
+        let row = []
+        for let x = 0; x < 8; ++x {
+            append(row, @Piece{PieceChar.Empty, Color.None, false})
+        }
+        append(game.board, row)
+    }
+
+    setup_row(game, 7, Color.White)
+    setup_row(game, 0, Color.Black)
+    
+    let w_pawn_row = game.board[6]
+    let b_pawn_row = game.board[1]
+    for let x = 0; x < 8; ++x {
+        w_pawn_row[x] = @Piece{PieceChar.WPawn, Color.White, false}
+        b_pawn_row[x] = @Piece{PieceChar.BPawn, Color.Black, false}
+    }
+    game.board[6] = w_pawn_row
+    game.board[1] = b_pawn_row
+}
+
+func setup_row(game: &Chess, y: int, color: int) {
+    let row = game.board[y]
+    if color == Color.White {
+        row[0] = @Piece{PieceChar.WRook, color, false}
+        row[1] = @Piece{PieceChar.WKnight, color, false}
+        row[2] = @Piece{PieceChar.WBishop, color, false}
+        row[3] = @Piece{PieceChar.WQueen, color, false}
+        row[4] = @Piece{PieceChar.WKing, color, false}
+        row[5] = @Piece{PieceChar.WBishop, color, false}
+        row[6] = @Piece{PieceChar.WKnight, color, false}
+        row[7] = @Piece{PieceChar.WRook, color, false}
+    } else {
+        row[0] = @Piece{PieceChar.BRook, color, false}
+        row[1] = @Piece{PieceChar.BKnight, color, false}
+        row[2] = @Piece{PieceChar.BBishop, color, false}
+        row[3] = @Piece{PieceChar.BQueen, color, false}
+        row[4] = @Piece{PieceChar.BKing, color, false}
+        row[5] = @Piece{PieceChar.BBishop, color, false}
+        row[6] = @Piece{PieceChar.BKnight, color, false}
+        row[7] = @Piece{PieceChar.BRook, color, false}
+    }
+    game.board[y] = row
+}
+
+func draw_board(game: &Chess) {
+    clear()
+    println("        {game.msg}")
+    println("   a  b  c  d  e  f  g  h")
+    
+    for let y = 0; y < 8; ++y {
+        print("{8 - y} ")
+        let row = game.board[y]
+        for let x = 0; x < 8; ++x {
+            let p = row[x]
+            
+            if x == game.cursor.x and y == game.cursor.y {
+                print("[{p.icon}]")
+            } elif x == game.selected.x and y == game.selected.y {
+                print("<{p.icon}>")
+            } else {
+                print(" {p.icon} ")
+            }
+        }
+        print("\n")
+    }
+    println("   a  b  c  d  e  f  g  h")
+}
+
+func is_clear(game: &Chess, x1: int, y1: int, x2: int, y2: int) : bool {
+    let dx = 0
+    let dy = 0
+    if x2 > x1 { dx = 1 } elif x2 < x1 { dx = -1 }
+    if y2 > y1 { dy = 1 } elif y2 < y1 { dy = -1 }
+    
+    let cx = x1 + dx
+    let cy = y1 + dy
+    while cx != x2 or cy != y2 {
+        let row = game.board[cy]
+        if row[cx].icon != PieceChar.Empty { return false }
+        cx = cx + dx
+        cy = cy + dy
+    }
+    return true
+}
+
+func validate_move(game: &Chess, fx: int, fy: int, tx: int, ty: int) : bool {
+    let f_row = game.board[fy]
+    let t_row = game.board[ty]
+    let p = f_row[fx]
+    let dest = t_row[tx]
+
+    if fx == tx and fy == ty { return false }
+    if dest.color == p.color { return false }
+
+    let dx = tx - fx
+    let dy = ty - fy
+    let adx = abs(dx)
+    let ady = abs(dy)
+
+    if p.icon == PieceChar.WPawn or p.icon == PieceChar.BPawn {
+        let dir = -1
+        if p.icon == PieceChar.BPawn { dir = 1 }
+        
+        if dx == 0 and dest.icon == PieceChar.Empty {
+            if dy == dir { return true }
+            if !p.has_moved and dy == dir * 2 {
+                let mid_row = game.board[fy + dir]
+                return mid_row[fx].icon == PieceChar.Empty
+            }
+        }
+        if adx == 1 and dy == dir and dest.color != Color.None { return true }
+        return false
+    }
+
+    if p.icon == PieceChar.WRook or p.icon == PieceChar.BRook {
+        if dx != 0 and dy != 0 { return false }
+        return is_clear(game, fx, fy, tx, ty)
+    }
+
+    if p.icon == PieceChar.WBishop or p.icon == PieceChar.BBishop {
+        if adx != ady { return false }
+        return is_clear(game, fx, fy, tx, ty)
+    }
+
+    if p.icon == PieceChar.WQueen or p.icon == PieceChar.BQueen {
+        if adx != ady and dx != 0 and dy != 0 { return false }
+        return is_clear(game, fx, fy, tx, ty)
+    }
+
+    if p.icon == PieceChar.WKnight or p.icon == PieceChar.BKnight {
+        return (adx == 2 and ady == 1) or (adx == 1 and ady == 2)
+    }
+
+    if p.icon == PieceChar.WKing or p.icon == PieceChar.BKing {
+        if adx <= 1 and ady <= 1 { return true }
+        
+        if !p.has_moved and dy == 0 and adx == 2 {
+            let rook_x = 0
+            if dx > 0 { rook_x = 7 }
+            let r_row = game.board[fy]
+            let rook = r_row[rook_x]
+            if !rook.has_moved and is_clear(game, fx, fy, rook_x, fy) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+func do_move(game: &Chess, fx: int, fy: int, tx: int, ty: int) {
+    let f_row = game.board[fy]
+    let t_row = game.board[ty]
+    let p = f_row[fx]
+
+    if (p.icon == PieceChar.WKing or p.icon == PieceChar.BKing) and abs(tx - fx) == 2 {
+        let rx = 0
+        let nrx = 3
+        if tx > fx { rx = 7; nrx = 5 }
+        let r_row = game.board[fy]
+        let rook = r_row[rx]
+        rook.has_moved = true
+        r_row[nrx] = rook
+        r_row[rx] = @Piece{PieceChar.Empty, Color.None, false}
+        game.board[fy] = r_row
+        f_row = game.board[fy]
+        t_row = game.board[ty]
+    }
+
+    p.has_moved = true
+    t_row[tx] = p
+    f_row[fx] = @Piece{PieceChar.Empty, Color.None, false}
+    
+    game.board[ty] = t_row
+    if fy != ty { game.board[fy] = f_row }
+
+    if game.turn == Color.White { 
+        game.turn = Color.Black 
+        game.msg = "Black's Turn"
+    } else { 
+        game.turn = Color.White 
+        game.msg = "White's Turn"
+    }
+}
+
+func chess_main_loop(game: &Chess) {
+    forever {
+        draw_board(game)
+        let k = readkey()
+        
+        if k == 'w' and game.cursor.y > 0 { --game.cursor.y }
+        elif k == 's' and game.cursor.y < 7 { ++game.cursor.y }
+        elif k == 'a' and game.cursor.x > 0 { --game.cursor.x }
+        elif k == 'd' and game.cursor.x < 7 { ++game.cursor.x }
+        elif k == ' ' or k == 'e' {
+            let cur_row = game.board[game.cursor.y]
+            let cur_p = cur_row[game.cursor.x]
+
+            if game.is_selecting {
+                if cur_p.color == game.turn {
+                    game.selected = @Position{game.cursor.x, game.cursor.y}
+                    game.is_selecting = false
+                    game.msg = "Move to where?"
+                }
+            } else {
+                if validate_move(game, game.selected.x, game.selected.y, game.cursor.x, game.cursor.y) {
+                    do_move(game, game.selected.x, game.selected.y, game.cursor.x, game.cursor.y)
+                    game.is_selecting = true
+                    game.selected = @Position{-1, -1}
+                } else {
+                    game.msg = "Invalid! Select piece again."
+                    game.is_selecting = true
+                    game.selected = @Position{-1, -1}
+                }
+            }
+        }
+    }
+}

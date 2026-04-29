@@ -1,6 +1,8 @@
 #ifndef VALUE_H
 #define VALUE_H
 
+#include "thirdparty/nothing/nothing.h"
+
 #define INT_CTYPE int
 #define FLOAT_CTYPE double
 #define BOOL_CTYPE bool
@@ -10,8 +12,6 @@
 
 #define INT_CTYPE_MIN INT_MIN
 #define INT_CTYPE_MAX INT_MAX
-
-#define VALUE_OFFSET 
 
 typedef struct Type Type;
 typedef struct Struct {

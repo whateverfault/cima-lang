@@ -34,6 +34,8 @@ typedef enum {
     
     TOKEN_ARROW,
     TOKEN_ASSIGN,
+
+    TOKEN_AS,
     
     TOKEN_INT,
     TOKEN_FLOAT,
@@ -73,6 +75,7 @@ typedef enum {
     TOKEN_KW_STATIC,
     TOKEN_KW_LET,
     TOKEN_KW_STRUCT,
+    TOKEN_KW_ENUM,
     TOKEN_KW_TRUE,
     TOKEN_KW_FALSE,
 } TokenKind;

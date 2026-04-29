@@ -13,8 +13,10 @@ typedef enum {
     AST_INDEX,
     AST_STRUCT,
     AST_MEMBER_ACCESS,
+    AST_CAST,
     AST_FUNC_DECL,
     AST_STRUCT_DECL,
+    AST_ENUM_DECL,
     AST_LET,
     AST_FOR,
     AST_ARR,
@@ -94,6 +96,17 @@ typedef struct AST_Patterns {
     size_t count;
     size_t capacity;
 } AST_Patterns;
+
+typedef struct AST_EnumMember {
+    String_View name;
+    AST_Node *initializer;
+} AST_EnumMember;
+
+typedef struct AST_EnumMembers {
+    AST_EnumMember *items;
+    size_t count;
+    size_t capacity;
+} AST_EnumMembers;
 
 typedef struct AST_Initializer {
     String_View name;
@@ -183,6 +196,12 @@ typedef struct {
     AST_Node *member;
 } AST_NodeMemberAccess;
 
+typedef struct {
+    AST_FIELDS
+    AST_Node *base;
+    AST_Type *type;
+} AST_NodeCast;
+
 typedef struct AST_NodeFnDecl {
     AST_FIELDS
     String_View name;
@@ -198,6 +217,12 @@ typedef struct {
     AST_Patterns fields;
     AST_Nodes methods;
 } AST_NodeStructDecl;
+
+typedef struct {
+    AST_FIELDS
+    String_View name;
+    AST_EnumMembers members;
+} AST_NodeEnumDecl;
 
 typedef struct {
     AST_FIELDS

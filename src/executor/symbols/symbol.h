@@ -63,6 +63,7 @@ typedef enum TypeKind {
     TYPE_PRIMITIVE,
     TYPE_ARRAY,
     TYPE_STRUCT,
+    TYPE_ENUM,
     TYPE_FUNC,
     TYPE_TYPE,
     TYPE_REF,
@@ -72,10 +73,11 @@ typedef struct Type Type;
 typedef struct Type {
     SYMBOL_FIELDS
     TypeKind kind;
-    size_t size;
     Type *el_type;
-    Members members;
+    Members *members;
     Func *func;
+    size_t member_index;
+    bool initialized;
 } Type;
 
 #endif //SYMBOL_H

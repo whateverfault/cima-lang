@@ -46,8 +46,8 @@ void print_parser_error(ParserError err) {
             printf("Wrong initializer name format.\n");
         } break;
 
-        case PERROR_WRONG_INITIALIZER_OBJECT: {
-            printf("Wrong initializer object.\n");
+        case PERROR_TOO_FEW_ENUM_MEMBERS: {
+            printf("Too few enum members.\n");
         } break;
 
         case PERROR_MULTIPLE_INITIALIZERS: {
@@ -98,12 +98,20 @@ void print_runtime_error(RuntimeError err) {
             printf("Cannot assign to constant.\n");
         } break;
 
-        case ERROR_CANNOT_REASSIGN_CONST: {
-            printf("Cannot reassign constant.\n");
+        case ERROR_CANNOT_REDEFINE_CONST: {
+            printf("Cannot redefine constant.\n");
         } break;
 
-        case ERROR_CANNOT_TAKE_REF_TO_CONST: {
-            printf("Cannot take reference to constant.\n");
+        case ERROR_CANNOT_REDEFINE_STRUCT: {
+            printf("Cannot redefine struct.\n");
+        } break;
+
+        case ERROR_CANNOT_REDEFINE_ENUM: {
+            printf("Cannot redefine enum.\n");
+        } break;
+            
+        case ERROR_CANNOT_TAKE_REF_TO_RVAL: {
+            printf("Cannot take reference to r-value.\n");
         } break;
 
         case ERROR_TOO_FEW_ARGS: {
@@ -134,8 +142,8 @@ void print_runtime_error(RuntimeError err) {
             printf("Stdin closed.\n");
         } break;
 
-        case ERROR_INDEX_OUT_OF_BOUNDS: {
-            printf("Index out of bounds.\n");
+        case ERROR_OUT_OF_BOUNDS: {
+            printf("Out of bounds.\n");
         } break;
 
         case ERROR_CONTINUE_OUTSIDE_LOOP: {
@@ -175,6 +183,7 @@ void usage(char **argv) {
 }
 
 // TODO: Implement garbage collector so no memory is leaked on structure reassignment
+// TODO: Implement UTF-8 chars
 
 int main(int argc, char **argv) {
     String_Builder source_sb = {0};

@@ -5,6 +5,9 @@
 
 void set_echo_enabled(bool enabled);
 int read_key();
+bool key_pressed();
+
+void sleep_ms(int ms);
 
 void init_rng();
 

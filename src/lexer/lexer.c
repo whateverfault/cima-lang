@@ -315,6 +315,9 @@ Token get_lit_token(Lexer *l) {
         else if (sv_cmp_cstr(&tok.val, "struct")) {
             tok.kind = TOKEN_KW_STRUCT;
         }
+        else if (sv_cmp_cstr(&tok.val, "enum")) {
+            tok.kind = TOKEN_KW_ENUM;
+        }
         else if (sv_cmp_cstr(&tok.val, "const")) {
             tok.kind = TOKEN_KW_CONST;
         }
@@ -359,6 +362,9 @@ Token get_lit_token(Lexer *l) {
         }
         else if (sv_cmp_cstr(&tok.val, "or")) {
             tok.kind = TOKEN_OROR;
+        }
+        else if (sv_cmp_cstr(&tok.val, "as")) {
+            tok.kind = TOKEN_AS;
         }
     }
     

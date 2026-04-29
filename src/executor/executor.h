@@ -10,7 +10,8 @@
 
 typedef struct HashMap HashMap;
 typedef struct {
-    HashMap *symbols;
+    HashMap *names;
+    HashMap *types;
 } Scope;
 
 typedef struct TypeCache {
@@ -18,6 +19,7 @@ typedef struct TypeCache {
     HashMap *func_cache;
     HashMap *type_cache;
     HashMap *ref_cache;
+    HashMap *enum_cache;
 } TypeCache;
 
 typedef struct Context Context;
@@ -55,8 +57,8 @@ EvalResult create_result(Type *type);
 
 Array *alloc_arr(Context *ctx, Type *el_type);
 
-bool resolve_name_sv(Context *ctx, String_View name_sv, Var **var);
-bool resolve_name_cstr(Context *ctx, char *name, Var **var);
+bool resolve_name(Context *ctx, String_View name_sv, Symbol **symb);
+bool resolve_name_cstr(Context *ctx, char *cstr, Symbol **symb);
 bool get_func(Context *ctx, String_View name_sv, Func **func);
 
 Member *get_member_from_node(Context *ctx, AST_Node *node, Value *base);

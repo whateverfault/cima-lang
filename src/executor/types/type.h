@@ -48,7 +48,9 @@ void alloc_type_value(Value *val, Type *type);
 Array *alloc_array_value(Type *el_type);
 Struct alloc_struct_value(Type *type);
 
-Type *alloc_struct_type(String_Builder *name_sb, Members members);
+Type *alloc_struct_type(String_Builder *name_sb, Members *members, bool initialized);
+Type *alloc_enum_el_type(Context *ctx, Type *t, Type *enum_type);
+Type *alloc_enum_type(String_Builder *name_sb, Members *members, bool initialized);
 Type *alloc_type_type(Context *ctx, Type *t);
 Type *alloc_ref_type(Context *ctx, Type *t);
 Type *alloc_func_type(Context *ctx, Func *func);
