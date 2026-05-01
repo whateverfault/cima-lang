@@ -4,6 +4,7 @@
 #include "executor/executor.h"
 #include "parser/parser.h"
 #include "parser/parser_error.h"
+#include "utf8/utf8.h"
 
 static String_Builder int_sb = CSTR_TO_SB("int");
 static String_Builder float_sb = CSTR_TO_SB("float");
@@ -617,9 +618,7 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
             }
 
             if (result.val.type == STR_TYPE) {
-                String_View sv = {0};
-                sv_from_sb(&sv, result.val.as_ptr);
-                format_str(sb, ctx, sv, va_args);
+                sb_append_sb(sb, result.val.as_ptr);
                 if (has_errors(ctx)) {
                     ast_free(expr);
                     return;
@@ -674,7 +673,9 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                 sb_appendf(sb, "%s", val.as_int? "true" : "false");
             }
             else if (val.type == CHAR_TYPE) {
-                sb_appendf(sb, "%c", (char)val.as_int);
+                char buf[5] = {0};
+                utf8catcodepoint(buf, val.as_int, 5);
+                sb_appendf(sb, "%s", buf);
             }
             else if (val.type == STR_TYPE) {
                 sb_append_sb(sb, val.as_ptr);
@@ -788,7 +789,7 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                     }
 
                     // TODO: print default values
-                    to_str(sb, ctx, field_val);*/
+                    to_str(sb, ctx, field_val, depth);*/
 
                     if (i < func->args.count - 1) {
                         sb_appendf(sb, ", ");

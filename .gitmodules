@@ -1,3 +1,6 @@
 [submodule "src/thirdparty/nothing"]
 	path = src/thirdparty/nothing
 	url = https://github.com/whateverfault/nothing.git
+[submodule "src/thirdparty/utf8.h"]
+	path = src/thirdparty/utf8
+	url = https://github.com/sheredom/utf8.h.git

@@ -5,19 +5,19 @@ enum Color {
 }
 
 enum PieceChar {
-    WKing   : 'K'
-    WQueen  : 'Q'
-    WRook   : 'R'
-    WBishop : 'B'
-    WKnight : 'N'
-    WPawn   : 'P'
-    BKing   : 'k'
-    BQueen  : 'q'
-    BRook   : 'r'
-    BBishop : 'b'
-    BKnight : 'n'
-    BPawn   : 'p'
-    Empty   : '.'
+    WKing   : '♔'
+    WQueen  : '♕'
+    WRook   : '♖'
+    WBishop : '♗'
+    WKnight : '♘'
+    WPawn   : '♙'
+    BKing   : '♚'
+    BQueen  : '♛'
+    BRook   : '♜'
+    BBishop : '♝'
+    BKnight : '♞'
+    BPawn   : '♟'
+    Empty   : '·'
 }
 
 struct Position {
@@ -103,7 +103,7 @@ func setup_row(game: &Chess, y: int, color: int) {
 
 func draw_board(game: &Chess) {
     clear()
-    println("        {game.msg}")
+    println("   {game.msg}")
     println("   a  b  c  d  e  f  g  h")
     
     for let y = 0; y < 8; ++y {

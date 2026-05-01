@@ -6,6 +6,8 @@
 #include "nothing/nothing.h"
 #include "other/built_in.h"
 
+#include "utf8/utf8.h"
+
 void ast_nodes_free(AST_Nodes nodes) {
     for (size_t i = 0; i < nodes.count; ++i) {
         ast_free(nodes.items[i]);
@@ -627,12 +629,15 @@ ParserError parse_char(Lexer *l, AST_Node **ret) {
         return PERROR_EMPTY_CHAR_LIT;
     }
 
-    int c = l->cur.val.items[0];
-    if (l->cur.val.count == 2) {
+    size_t len = utf8nlen(l->cur.val.items, l->cur.val.count);
+    
+    int c;
+    utf8codepoint(l->cur.val.items, &c);
+    if (len == 2) {
         c = escape(l->cur.val.items[1]);
     }
     
-    if (l->cur.val.count > 1 && c < 0) {
+    if (len > 1 && c < 0) {
         return PERROR_MULTI_CHARACTER_CHAR_LIT;
     }
     
