@@ -32,7 +32,7 @@ typedef enum {
     TOKEN_EQ,
     TOKEN_NEQ,
     
-    TOKEN_ARROW,
+    TOKEN_FAT_ARROW,
     TOKEN_ASSIGN,
 
     TOKEN_AS,
@@ -80,19 +80,29 @@ typedef enum {
     TOKEN_KW_FALSE,
 } TokenKind;
 
-typedef struct {
-    String_View val;
+typedef struct Span {
+    size_t start_line;
+    size_t start_col;
+    size_t end_line;
+    size_t end_col;
+} Span;
+
+typedef struct Token {
+    StringView val;
     TokenKind kind;
+    Span span;
 } Token;
 
 typedef struct {
-    String_View source;
-    String_View skipped;
+    StringView source;
+    StringView skipped;
     size_t pos;
     Token cur;
 } Lexer;
 
 int escape(int c);
+
+Span span_combine(Span span_1, Span span_2);
 
 bool is_binop(Token tok);
 bool is_unop(Token tok);

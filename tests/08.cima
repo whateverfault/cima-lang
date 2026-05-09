@@ -1,0 +1,7 @@
+let a = "Hello, World!"
+println("{a}")
+
+a[0] = '🧱'
+a[12] = '😂'
+
+println("{a}")

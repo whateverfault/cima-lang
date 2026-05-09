@@ -57,9 +57,9 @@ EvalResult create_result(Type *type);
 
 Array *alloc_arr(Context *ctx, Type *el_type);
 
-bool resolve_name(Context *ctx, String_View name_sv, Symbol **symb);
+bool resolve_name(Context *ctx, StringView name_sv, Symbol **symb);
 bool resolve_name_cstr(Context *ctx, char *cstr, Symbol **symb);
-bool get_func(Context *ctx, String_View name_sv, Func **func);
+bool get_func(Context *ctx, StringView name_sv, Func **func);
 
 Member *get_member_from_node(Context *ctx, AST_Node *node, Value *base);
 

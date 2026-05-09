@@ -19,6 +19,7 @@ Value sleep_func(Context *ctx, Context *fn_ctx);
 Value clear_func(Context *ctx, Context *fn_ctx);
 Value move_cursor_func(Context *ctx, Context *fn_ctx);
 
+Value str_len_func(Context *ctx, Context *fn_ctx);
 Value trim_func(Context *ctx, Context *fn_ctx);
 Value trim_left_func(Context *ctx, Context *fn_ctx);
 Value trim_right_func(Context *ctx, Context *fn_ctx);

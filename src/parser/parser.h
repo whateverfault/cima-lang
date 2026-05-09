@@ -19,8 +19,8 @@ AST_Type *alloc_arr_type_node(AST_Type *el_type);
 
 AST_NodeBinOp *alloc_binop_node(AST_Node *lhs, BinaryOp op, AST_Node *rhs);
 AST_NodeUnOp *alloc_unop_node(AST_Node *expr, UnaryOp op);
-AST_NodeLit *alloc_lit_node(AST_Value val);
-AST_NodeName *alloc_name_node(String_View sv);
+AST_NodeLit *alloc_lit_node(AST_Value val, Span span);
+AST_NodeName *alloc_name_node(StringView sv);
 AST_NodeArray *alloc_arr_node(AST_Nodes nodes);
 
 ParserError parse_type(Lexer *l, AST_Node **ret);

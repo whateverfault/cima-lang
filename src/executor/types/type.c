@@ -6,14 +6,29 @@
 #include "parser/parser_error.h"
 #include "utf8/utf8.h"
 
-static String_Builder int_sb = CSTR_TO_SB("int");
-static String_Builder float_sb = CSTR_TO_SB("float");
-static String_Builder bool_sb = CSTR_TO_SB("bool");
-static String_Builder char_sb = CSTR_TO_SB("char");
-static String_Builder str_sb = CSTR_TO_SB("str");
-static String_Builder any_sb = CSTR_TO_SB("any");
-static String_Builder void_sb = CSTR_TO_SB("void");
-static String_Builder variadic_sb = CSTR_TO_SB("...");
+static int32_t int_utf32[] = {'i', 'n', 't'};
+static UnicodeStringBuilder int_sb = CSTR_TO_SB_UNICODE(int_utf32);
+
+static int32_t float_utf32[] = {'f', 'l', 'o', 'a', 't'};
+static UnicodeStringBuilder float_sb = CSTR_TO_SB_UNICODE(float_utf32);
+
+static int32_t bool_utf32[] = {'b', 'o', 'o', 'l'};
+static UnicodeStringBuilder bool_sb = CSTR_TO_SB_UNICODE(bool_utf32);
+
+static int32_t char_utf32[] = {'c', 'h', 'a', 'r'};
+static UnicodeStringBuilder char_sb = CSTR_TO_SB_UNICODE(char_utf32);
+
+static int32_t str_utf32[] = {'s', 't', 'r'};
+static UnicodeStringBuilder str_sb = CSTR_TO_SB_UNICODE(str_utf32);
+
+static int32_t any_utf32[] = {'a', 'n', 'y'};
+static UnicodeStringBuilder any_sb = CSTR_TO_SB_UNICODE(any_utf32);
+
+static int32_t void_utf32[] = {'v', 'o', 'i', 'd'};
+static UnicodeStringBuilder void_sb = CSTR_TO_SB_UNICODE(void_utf32);
+
+static int32_t variadic_utf32[] = {'.', '.', '.'};
+static UnicodeStringBuilder variadic_sb = CSTR_TO_SB_UNICODE(variadic_utf32);
 
 const Type int_symb = (Type){
     .name = &int_sb,
@@ -108,7 +123,7 @@ size_t hash_member(Member *member) {
     hash_combine(h, (size_t)member->type);
     
     if (member->name != NULL && member->name->count > 0) {
-        h = hash_combine(h, hash_sb(member->name));
+        h = hash_combine(h, hash_sb_unicode(member->name));
     }
     
     return h;
@@ -135,7 +150,7 @@ size_t hash_enum(Type *t) {
     }
 
     if (t->name != NULL) {
-        h = hash_combine(h, hash_sb(t->name));
+        h = hash_combine(h, hash_sb_unicode(t->name));
     }
     
     return h;
@@ -151,7 +166,7 @@ size_t hash_type(Type *t) {
     }
     
     if (t->name != NULL) {
-        h = hash_combine(h, hash_sb(t->name));
+        h = hash_combine(h, hash_sb_unicode(t->name));
     }
     
     if (t->el_type != NULL) {
@@ -161,16 +176,12 @@ size_t hash_type(Type *t) {
     return h;
 }
 
-size_t hash_patterns(Patterns patterns) {
+size_t hash_func_args(Patterns patterns) {
     size_t h = 0;
 
     for (size_t i = 0; i < patterns.count; ++i) {
         Pattern pattern = patterns.items[i];
         h = hash_combine(h, hash_type(pattern.type));
-        
-        if (pattern.name != NULL && pattern.name->count > 0) {
-            h = hash_combine(h, hash_sb(pattern.name));
-        }
     }
 
     return h;
@@ -181,16 +192,20 @@ size_t hash_func(Func *f) {
 
     h = hash_combine(h, f->kind);
     if (f->name->count > 0) {
-        h = hash_combine(h, hash_sb(f->name));
+        h = hash_combine(h, hash_sb_unicode(f->name));
     }
     
-    h = hash_combine(h, hash_patterns(f->args));
+    h = hash_combine(h, hash_func_args(f->args));
     return h;
 }
 
-bool get_type_field(Type *type, String_View name, Member **field) {
+bool compare_funcs(Func *f_1, Func *f_2) {
+    return hash_func(f_1) == hash_func(f_2);
+}
+
+bool get_type_field(Type *type, UnicodeStringView name, Member **field) {
     for (size_t i = 0; i < type->members->count; ++i) {
-        if (sv_cmp_sb(&name, type->members->items[i]->name)) {
+        if (sv_cmp_sb_unicode(&name, type->members->items[i]->name)) {
             *field = type->members->items[i];
             return true;
         }
@@ -241,11 +256,11 @@ void alloc_type_value(Value *val, Type *type) {
     }
 }
 
-bool get_member(Type *type, String_View *name_sv, Member **member) {
+bool get_member(Type *type, StringView *name_sv, Member **member) {
     for (size_t i = 0; i < type->members->count; ++i) {
         Member *m = type->members->items[i];
 
-        if (m->name != NULL && sv_cmp_sb(name_sv, m->name)) {
+        if (m->name != NULL && sv_cmp_unicode_sb(name_sv, m->name)) {
             *member = m;
             return true;
         }
@@ -380,7 +395,7 @@ void assign_field(Context *ctx, Struct strct, Member *member, Value val) {
     *field_val = copy_value(&value);
 }
 
-Type *alloc_struct_type(String_Builder *name_sb, Members *members, bool initialized) {
+Type *alloc_struct_type(UnicodeStringBuilder *name_sb, Members *members, bool initialized) {
     Type *type = (Type*)calloc(1, sizeof(Type));
     assert(type != NULL && "Failed to allocate type");
 
@@ -431,7 +446,7 @@ Type *alloc_enum_el_type(Context *ctx, Type *t, Type *enum_type) {
     return type;
 }
 
-Type *alloc_enum_type(String_Builder *name_sb, Members *members, bool initialized) {
+Type *alloc_enum_type(UnicodeStringBuilder *name_sb, Members *members, bool initialized) {
     Type *type = (Type*)calloc(1, sizeof(Type));
     assert(type != NULL && "Failed to allocate type");
 
@@ -554,7 +569,7 @@ Type *alloc_array_type(Context *ctx, Type *el_type) {
     return type;
 }
 
-void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_args) {
+void format_str(UnicodeStringBuilder *sb, Context *ctx, StringView fmt_sv, Array *va_args) {
     Lexer l = {
         .source = fmt_sv,
         .skipped = {0},
@@ -565,23 +580,23 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
     size_t va_arg_pos = 0;
 
     while (l.cur.kind != TOKEN_EOF) {
-        sb_append_sv(sb, &l.skipped);
+        sb_unicode_append_sv(sb, &l.skipped);
         
         if (l.cur.kind != TOKEN_LBRACE) {
             if (l.cur.kind == TOKEN_CHAR) {
-                sb_appendc(sb, '\'');
+                sb_unicode_appendc(sb, '\'');
             }
             else if (l.cur.kind == TOKEN_STR) {
-                sb_appendc(sb, '\"');
+                sb_unicode_appendc(sb, '\"');
             }
             
-            sb_append_sv(sb, &l.cur.val);
+            sb_unicode_append_sv(sb, &l.cur.val);
 
             if (l.cur.kind == TOKEN_CHAR) {
-                sb_appendc(sb, '\'');
+                sb_unicode_appendc(sb, '\'');
             }
             else if (l.cur.kind == TOKEN_STR) {
-                sb_appendc(sb, '\"');
+                sb_unicode_appendc(sb, '\"');
             }
             
             lexer_next(&l);
@@ -618,7 +633,7 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
             }
 
             if (result.val.type == STR_TYPE) {
-                sb_append_sb(sb, result.val.as_ptr);
+                sb_append_sb_unicode(sb, result.val.as_ptr);
                 if (has_errors(ctx)) {
                     ast_free(expr);
                     return;
@@ -647,13 +662,13 @@ void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_
         return;
     }
     
-    sb_append_sv(sb, &l.skipped);
+    sb_unicode_append_sv(sb, &l.skipped);
 }
 
 // TODO: Force types to have to_str method (Implement traits)
 // TODO: Implement any type
 
-void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
+void to_str(UnicodeStringBuilder *sb, Context *ctx, Value val, size_t depth) {
     if (depth >= 1024) {
         append_error(ctx, ERROR_RECURSION_LIMIT_EXCEEDED);
         return;
@@ -664,24 +679,23 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
     switch (val.type->kind) {
         case TYPE_PRIMITIVE: {
             if (val.type == INT_TYPE) {
-                sb_appendf(sb, "%d", val.as_int);
+                sb_appendf_unicode(sb, "%d", val.as_int);
             }
             else if (val.type == FLOAT_TYPE) {
-                sb_appendf(sb, "%f", val.as_float);
+                sb_appendf_unicode(sb, "%f", val.as_float);
             }
             else if (val.type == BOOL_TYPE) {
-                sb_appendf(sb, "%s", val.as_int? "true" : "false");
+                sb_appendf_unicode(sb, "%s", val.as_int? "true" : "false");
             }
             else if (val.type == CHAR_TYPE) {
-                char buf[5] = {0};
-                utf8catcodepoint(buf, val.as_int, 5);
-                sb_appendf(sb, "%s", buf);
+                sb_appendc_unicode(sb, val.as_int);
             }
             else if (val.type == STR_TYPE) {
-                sb_append_sb(sb, val.as_ptr);
+                sb_append_sb_unicode(sb, val.as_ptr);
             }
             else if (val.type == VOID_TYPE) {
-                sb_appendf(sb, "()");
+                sb_unicode_appendc(sb, '(');
+                sb_unicode_appendc(sb, ')');
             }
             else {
                 append_error(ctx, ERROR_INCOMPATIBLE_TYPES);
@@ -689,7 +703,7 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
         } break;
 
         case TYPE_ARRAY: {
-            sb_appendc(sb, '[');
+            sb_unicode_appendc(sb, '[');
 
             Array *arr = (void*)val.as_ptr;
 
@@ -701,16 +715,17 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                     }
 
                     if (i < arr->count - 1) {
-                        sb_appendf(sb, ", ");
+                        sb_unicode_appendc(sb, ',');
+                        sb_unicode_appendc(sb, ' ');
                     }
                 }
             }
             
-            sb_appendc(sb, ']');
+            sb_unicode_appendc(sb, ']');
         } break;
 
         case TYPE_STRUCT: {
-            sb_appendc(sb, '{');
+            sb_unicode_appendc(sb, '{');
 
             Struct strct = val.as_struct;
 
@@ -729,8 +744,8 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                     continue;
                 }
                 
-                sb_append_sb(sb, member->name);
-                sb_appendf(sb, ": ");
+                sb_append_sb_unicode(sb, member->name);
+                sb_appendf_unicode(sb, ": ");
 
                 Value field_val = get_member_val(strct, member);
                 if (has_errors(ctx)) {
@@ -745,41 +760,41 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                 ++fields_printed;
                 
                 if (fields_printed < fields_count) {
-                    sb_appendf(sb, ", ");
+                    sb_appendf_unicode(sb, ", ");
                 }
             }
             
-            sb_appendc(sb, '}');
+            sb_unicode_appendc(sb, '}');
         } break;
 
         case TYPE_ENUM: {
             Type *type = val.type;
             
-            sb_append_sb(sb, type->name);
+            sb_append_sb_unicode(sb, type->name);
             if (type->el_type == NULL) {
                 break;
             }
             
-            sb_appendc(sb, '.');
+            sb_unicode_appendc(sb, '.');
 
             Member *member = type->members->items[type->member_index];
-            sb_append_sb(sb, member->name);
+            sb_append_sb_unicode(sb, member->name);
         } break;
 
         case TYPE_FUNC: {
             Func *func = val.as_ptr;
 
             if (func != NULL) {
-                sb_appendf(sb, "func ");
+                sb_appendf_unicode(sb, "func ");
 
-                sb_append_sb(sb, func->name);
+                sb_append_sb_unicode(sb, func->name);
 
-                sb_appendc(sb, '(');
+                sb_unicode_appendc(sb, '(');
                 
                 for (size_t i = 0; i < func->args.count; ++i) {
                     Pattern arg = func->args.items[i];
 
-                    sb_append_sb(sb, arg.name);
+                    sb_append_sb_unicode(sb, arg.name);
                     // TODO: print types
                     /*sb_appendf(sb, ": ");
 
@@ -792,12 +807,12 @@ void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth) {
                     to_str(sb, ctx, field_val, depth);*/
 
                     if (i < func->args.count - 1) {
-                        sb_appendf(sb, ", ");
+                        sb_appendf_unicode(sb, ", ");
                     }
                 }
             }
 
-            sb_appendc(sb, ')');
+            sb_unicode_appendc(sb, ')');
         } break;
 
         case TYPE_REF: {
@@ -910,7 +925,7 @@ BOOL_CTYPE to_bool(Context *ctx, Value val) {
                 return val.as_int != 0;
             }
             if (val.type == STR_TYPE) {
-                String_Builder *sb = val.as_ptr;
+                StringBuilder *sb = val.as_ptr;
                 return sb != NULL && sb->count != 0;
             }
             if (val.type == VOID_TYPE) {
@@ -1007,7 +1022,7 @@ Value cast_value(Context *ctx, Value val, Type *type) {
                 return casted;
             }
             if (type == STR_TYPE) {
-                String_Builder *sb = sb_alloc();
+                UnicodeStringBuilder *sb = sb_alloc_unicode();
                 to_str(sb, ctx, val, 0);
                 if (has_errors(ctx)) {
                     return casted;
@@ -1159,7 +1174,7 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
 
     if (lhs.type == CHAR_TYPE) {
         if (rhs.type == CHAR_TYPE) {
-            String_Builder *sb = sb_alloc();
+            StringBuilder *sb = sb_alloc();
             sb_appendc(sb, lhs.as_int);
             sb_appendc(sb, rhs.as_int);
             val.as_ptr = sb;
@@ -1167,7 +1182,7 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
             return val;
         }
         if (rhs.type == STR_TYPE) {
-            String_Builder *sb = sb_alloc();
+            StringBuilder *sb = sb_alloc();
             sb_appendc(sb, lhs.as_int);
             sb_append_sb(sb, rhs.as_ptr);
             val.as_ptr = sb;
@@ -1178,7 +1193,7 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
 
     if (lhs.type == STR_TYPE) {
         if (rhs.type == CHAR_TYPE) {
-            String_Builder *sb = sb_alloc();
+            StringBuilder *sb = sb_alloc();
             sb_append_sb(sb, lhs.as_ptr);
             sb_appendc(sb, rhs.as_int);
             val.as_ptr = sb;
@@ -1186,7 +1201,7 @@ Value binary_plus(Context *ctx, Value lhs, Value rhs) {
             return val;
         }
         if (rhs.type == STR_TYPE) {
-            String_Builder *sb = sb_alloc();
+            StringBuilder *sb = sb_alloc();
             sb_append_sb(sb, lhs.as_ptr);
             sb_append_sb(sb, rhs.as_ptr);
             val.as_ptr = sb;
@@ -1596,8 +1611,8 @@ Value binary_eq(Context *ctx, Value lhs, Value rhs) {
 
     if (lhs.type == STR_TYPE) {
         if (rhs.type == STR_TYPE) {
-            String_Builder *a = lhs.as_ptr;
-            String_Builder *b = rhs.as_ptr;
+            StringBuilder *a = lhs.as_ptr;
+            StringBuilder *b = rhs.as_ptr;
 
             if (a->count != b->count) {
                 val.as_int = false;
@@ -1616,7 +1631,7 @@ Value binary_eq(Context *ctx, Value lhs, Value rhs) {
         }
 
         if (rhs.type == CHAR_TYPE) {
-            String_Builder *s = lhs.as_ptr;
+            StringBuilder *s = lhs.as_ptr;
             val.as_int = (s->count == 1 && s->items[0] == (char)rhs.as_int);
             return val;
         }

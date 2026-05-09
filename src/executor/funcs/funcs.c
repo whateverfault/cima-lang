@@ -5,6 +5,7 @@
 #include "other/built_in.h"
 #include "other/sys/sys.h"
 #include "executor/types/type.h"
+#include "utf8/utf8.h"
 
 #define HAS_VARIADIC(func) ((func)->args.count > 0 && (func)->args.items[(func)->args.count - 1].type == VARIADIC_TYPE)
 
@@ -36,9 +37,9 @@ void check_args(Context *ctx, Func *func, AST_Args args) {
     }*/
 }
 
-bool check_arg_name(Func *func, String_View *name_sv) {
+bool check_arg_name(Func *func, UnicodeStringView *name_sv) {
     for (size_t i = 0; i < func->args.count; ++i) {
-        if (sv_cmp_sb(name_sv, func->args.items[i].name)) {
+        if (sv_cmp_sb_unicode(name_sv, func->args.items[i].name)) {
             return true;
         }
     }
@@ -80,14 +81,14 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
             return;
         }
 
-        String_Builder *name_sb = func->args.items[i].name;
+        UnicodeStringBuilder *name_sb = func->args.items[i].name;
         if (ast_arg.has_name) {
-            name_sb = sb_alloc();
-            sv_to_sb(&ast_arg.name, name_sb);
+            name_sb = sb_alloc_unicode();
+            sv_to_unicode_sb(&ast_arg.name, name_sb);
         }
 
-        String_View sv = {0};
-        sv_from_sb(&sv, name_sb);
+        UnicodeStringView sv = {0};
+        sv_from_sb_unicode(&sv, name_sb);
         
         if (!check_arg_name(func, &sv)) {
             append_error(ctx, ERROR_UNEXPECTED_NAMED_ARG);
@@ -113,10 +114,10 @@ void unwrap_args(Context *ctx, Func *func, AST_Args args, Var **unwrapped) {
 
         for (size_t j = 0; j < func->args.count; ++j) {
             Pattern arg = func->args.items[j];
-            String_View arg_sv;
-            sv_from_sb(&arg_sv, arg.name);
+            UnicodeStringView arg_sv;
+            sv_from_sb_unicode(&arg_sv, arg.name);
             
-            if (sv_cmp_sb(&arg_sv, name_sb)) {
+            if (sv_cmp_sb_unicode(&arg_sv, name_sb)) {
                 result.val = cast_value(ctx, result.val, arg.type);
                 if (has_errors(ctx)) {
                     return;
@@ -167,7 +168,7 @@ Value exec_func(Context *ctx, Func *func, AST_Args args) {
     HashMap *local_names = hm_copy(ctx->global->scope.names);
             
     for (size_t i = 0; i < func->args.count; ++i) {
-        assert(hm_nput(local_names, unwrapped[i].name->items, unwrapped[i].name->count, &unwrapped[i]) == 0);
+        assert(hm_put_sb_unicode(local_names, unwrapped[i].name, &unwrapped[i]) == 0);
     }
 
     Context local_context = {
@@ -224,8 +225,8 @@ Value print_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    sb_pprint((String_Builder*)formated.as_ptr);
-    da_pfree((String_Builder*)formated.as_ptr);
+    sb_print_unicode(formated.as_ptr);
+    da_pfree((UnicodeStringBuilder*)formated.as_ptr);
     free(formated.as_ptr);
     return ret;
 }
@@ -234,7 +235,7 @@ Value format_func(Context *ctx, Context *fn_ctx) {
     Value ret = create_value(STR_TYPE);
     
     Var *fmt;
-    if (!resolve_name_cstr(fn_ctx, "msg", (void*)&fmt)) {
+    if (!resolve_name_cstr(fn_ctx, "fmt", (void*)&fmt)) {
         append_error(ctx, ERROR_NOT_DEFINED);
         return ret;
     }
@@ -245,13 +246,18 @@ Value format_func(Context *ctx, Context *fn_ctx) {
         return ret;
     }
 
-    String_View fmt_sv = {0};
-    sv_from_sb(&fmt_sv, fmt->val->as_ptr);
+    StringBuilder fmt_sb = {0};
+    sb_from_unicode_sb(&fmt_sb, fmt->val->as_ptr);
 
+    StringView fmt_sv = {0};
+    sv_from_sb(&fmt_sv, &fmt_sb);
+    
     Array *va_args_arr = (void*)va_args->val->as_ptr;
     
     ret.as_ptr = sb_alloc();
     format_str(ret.as_ptr, ctx, fmt_sv, va_args_arr);
+
+    da_free(fmt_sb);
     return ret;
 }
 
@@ -366,7 +372,7 @@ Value move_cursor_func(Context *ctx, Context *fn_ctx) {
     return ret;
 }
 
-typedef String_Builder (*trim_fn)(String_Builder *sb);
+typedef StringBuilder (*trim_fn)(StringBuilder *sb);
 Value trim(Context *ctx, Context *fn_ctx, trim_fn trim_fn) {
     Value ret = create_value(STR_TYPE);
     
@@ -376,8 +382,8 @@ Value trim(Context *ctx, Context *fn_ctx, trim_fn trim_fn) {
         return ret;
     }
 
-    String_Builder trimmed = trim_fn(str->val->as_ptr);
-    String_Builder *sb = sb_alloc();
+    StringBuilder trimmed = trim_fn(str->val->as_ptr);
+    StringBuilder *sb = sb_alloc();
     sb->items = trimmed.items;
     sb->count = trimmed.count;
     sb->capacity = trimmed.capacity;
@@ -409,6 +415,21 @@ Value arr_len_func(Context *ctx, Context *fn_ctx) {
     
     Array *arr_val = arr->val->as_ptr;
     ret.as_int = arr_val->count;
+
+    return ret;
+}
+
+Value str_len_func(Context *ctx, Context *fn_ctx) {
+    Value ret = create_value(INT_TYPE);
+    
+    Var *str;
+    if (!resolve_name_cstr(fn_ctx, "str", (void*)&str)) {
+        append_error(ctx, ERROR_NOT_DEFINED);
+        return ret;
+    }
+    
+    StringBuilder *str_val = str->val->as_ptr;
+    ret.as_int = utf8nlen(str_val->items, str_val->count);
 
     return ret;
 }

@@ -6,6 +6,8 @@
 #include "executor/types/type.h"
 
 #define NOTHING_IMPLEMENTATION
+#define NOTHING_UNICODE
+#define NOTHING_UTF8_H_PATH "utf8/utf8.h"
 #include "nothing/nothing.h"
 
 #include "executor/funcs/funcs.h"
@@ -13,6 +15,7 @@
 #include "executor.h"
 
 #include "other/built_in.h"
+#include "utf8/utf8.h"
 
 #define GET_REF_VALUE(ref) *(Value*)(ref).as_ptr
 
@@ -32,11 +35,11 @@ void global_ctx_init(Context *ctx) {
     
     for (size_t i = 0; i < builtin_funcs_count; ++i) {
         builtin_funcs[i].type = alloc_func_type(ctx, (void*)&builtin_funcs[i]);
-        hm_put_sb(ctx->scope.names, builtin_funcs[i].name, &builtin_funcs[i]);
+        hm_put_hashed(ctx->scope.names, hash_utf32(builtin_funcs[i].name->items, builtin_funcs[i].name->count), (Func*)&builtin_funcs[i]);
     }
 
     for (size_t i = 0; i < builtin_types_count; ++i) {
-        hm_put_sb(ctx->scope.types, builtin_types[i]->name, builtin_types[i]);
+        hm_put_hashed(ctx->scope.types, hash_utf32(builtin_types[i]->name->items, builtin_types[i]->name->count), builtin_types[i]);
     }
 }
 
@@ -151,7 +154,7 @@ Value alloc_func(Context *ctx, Func *func) {
     return val;
 }
 
-Var *alloc_var(String_Builder *name_sb, Value *val, bool constant) {
+Var *alloc_var(UnicodeStringBuilder *name_sb, Value *val, bool constant) {
     Var *var = (Var*)calloc(1, sizeof(Var));
     assert(var != NULL && "Memory allocation failed");
     
@@ -164,7 +167,7 @@ Var *alloc_var(String_Builder *name_sb, Value *val, bool constant) {
     return var;
 }
 
-FuncCustom *alloc_custom_func(Context *ctx, String_Builder *name, Patterns args, AST_Node *body, Type *ret_type, bool is_static) {
+FuncCustom *alloc_custom_func(Context *ctx, UnicodeStringBuilder *name, Patterns args, AST_Node *body, Type *ret_type, bool is_static) {
     FuncCustom *func = (FuncCustom*)calloc(1, sizeof(FuncCustom));
     assert(func != NULL && "Memory allocation failed");
     
@@ -203,23 +206,23 @@ EvalResult create_result(Type *type) {
     };
 }
 
-bool resolve_name(Context *ctx, String_View name_sv, Symbol **symb) {
-    *symb = hm_nget(ctx->scope.names, name_sv.items, name_sv.count);
+bool resolve_name(Context *ctx, StringView name_sv, Symbol **symb) {
+    *symb = hm_get_hashed(ctx->scope.names, hash_ascii(name_sv.items, name_sv.count));
     return *symb != NULL;
 }
 
 bool resolve_name_cstr(Context *ctx, char *cstr, Symbol **symb) {
-    *symb = hm_get(ctx->scope.names, cstr);
+    *symb = hm_get_hashed(ctx->scope.names, hash_ascii(cstr, strlen(cstr)));
     return *symb != NULL;
 }
 
-bool resolve_type_name(Context *ctx, String_View name_sv, Type **type) {
-    *type = hm_nget(ctx->scope.types, name_sv.items, name_sv.count);
+bool resolve_type_name(Context *ctx, StringView name_sv, Type **type) {
+    *type = hm_get_hashed(ctx->scope.types, hash_ascii(name_sv.items, name_sv.count));
     return *type != NULL;
 }
 
-bool resolve_func(Context *ctx, String_View name_sv, Func **func) {
-    *func = hm_nget(ctx->scope.names, name_sv.items, name_sv.count);
+bool resolve_func(Context *ctx, StringView name_sv, Func **func) {
+    *func = hm_get_hashed(ctx->scope.names, hash_ascii(name_sv.items, name_sv.count));
     return *func != NULL;
 }
 
@@ -285,8 +288,8 @@ Type *resolve_type(Context *ctx, AST_Type *ast_type) {
 }
 
 void resolve_pattern(Context *ctx, AST_Pattern ast_pattern, Pattern *pattern) {
-    String_Builder *name_sb = sb_alloc();
-    sv_to_sb(&ast_pattern.name, name_sb);
+    UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+    sv_to_unicode_sb(&ast_pattern.name, name_sb);
 
     Type *type = resolve_type(ctx, ast_pattern.type);
     if (has_errors(ctx)) {
@@ -321,8 +324,8 @@ Member *alloc_member() {
 }
 
 Member *resolve_field(Context *ctx, AST_Pattern ast_field) {
-    String_Builder *name_sb = sb_alloc();
-    sv_to_sb(&ast_field.name, name_sb);
+    UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+    sv_to_unicode_sb(&ast_field.name, name_sb);
 
     Type *type = resolve_type(ctx, ast_field.type);
     if (has_errors(ctx)) {
@@ -392,8 +395,8 @@ void resolve_methods(Context *ctx, AST_Nodes ast_methods, Members *members) {
             ret_type = VOID_TYPE;
         }
         
-        String_Builder *name_sb = sb_alloc();
-        sv_to_sb(&func_node->name, name_sb);
+        UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+        sv_to_unicode_sb(&func_node->name, name_sb);
         
         FuncCustom *func = alloc_custom_func(ctx, name_sb, args, func_node->body, ret_type, func_node->is_static);
         Type *func_type = alloc_func_type(ctx, (void*)func);
@@ -418,8 +421,8 @@ void resolve_enum_members(Context *ctx, Type *enum_type, AST_EnumMembers ast_mem
     for (size_t i = 0; i < ast_members.count; ++i) {
         AST_EnumMember ast_member = ast_members.items[i];
         
-        String_Builder *name_sb = sb_alloc();
-        sv_to_sb(&ast_member.name, name_sb);
+        UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+        sv_to_unicode_sb(&ast_member.name, name_sb);
 
         EvalResult result;
         if (ast_member.initializer != NULL) {
@@ -454,18 +457,13 @@ void resolve_enum_members(Context *ctx, Type *enum_type, AST_EnumMembers ast_mem
     }
 }
 
-// TODO: Implement function overloading
-
 void register_func(Context *ctx, AST_Node *node) {
     assert(node->kind == AST_FUNC_DECL);
 
     AST_NodeFuncDecl *func_node = (AST_NodeFuncDecl*)node;
     
     Func *check = NULL;
-    if (resolve_func(ctx, func_node->name, &check)) {
-        append_error(ctx, ERROR_CANNOT_REDEFINE_FUNC);
-        return;
-    }
+    resolve_func(ctx, func_node->name, &check);
 
     Patterns args = {0};
     resolve_patterns(ctx, func_node->args, &args);
@@ -485,18 +483,24 @@ void register_func(Context *ctx, AST_Node *node) {
         return;
     }
 
-    String_Builder *name_sb = NULL;
+    UnicodeStringBuilder *name_sb = NULL;
     if (check == NULL) {
-        name_sb = sb_alloc();
-        sv_to_sb(&func_node->name, name_sb);
+        name_sb = sb_alloc_unicode();
+        sv_to_unicode_sb(&func_node->name, name_sb);
     }
     else {
         name_sb = check->name;
-        patterns_free(check->args);
     }
     
     FuncCustom *func = alloc_custom_func(ctx, name_sb, args, func_node->body, ret_type, func_node->is_static);
-    assert(hm_nput(ctx->scope.names, func_node->name.items, func_node->name.count, func) == 0 && "Failed to register function.");
+
+    if (check != NULL && compare_funcs(check, (Func*)func)) {
+        patterns_free(func->args);
+        append_error(ctx, ERROR_CANNOT_REDEFINE_FUNC);
+        return;
+    }
+    
+    assert(hm_put_hashed(ctx->scope.names, hash_ascii(func_node->name.items, func_node->name.count), func) == 0 && "Failed to register function.");
 }
 
 void register_struct_declaration(Context *ctx, AST_Node *node) {
@@ -510,11 +514,11 @@ void register_struct_declaration(Context *ctx, AST_Node *node) {
         return;
     }
 
-    String_Builder *name_sb = sb_alloc();
-    sv_to_sb(&struct_node->name, name_sb);
+    UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+    sv_to_unicode_sb(&struct_node->name, name_sb);
     
     Type *type = alloc_struct_type(name_sb, NULL, false);
-    assert(hm_put_sb(ctx->scope.types, type->name, type) == 0 && "Failed to register type.");
+    assert(hm_put_hashed(ctx->scope.types, hash_ascii((void*)struct_node->name.items, struct_node->name.count), type) == 0 && "Failed to register type.");
 }
 
 void register_enum_declaration(Context *ctx, AST_Node *node) {
@@ -528,11 +532,11 @@ void register_enum_declaration(Context *ctx, AST_Node *node) {
         return;
     }
 
-    String_Builder *name_sb = sb_alloc();
-    sv_to_sb(&enum_node->name, name_sb);
+    UnicodeStringBuilder *name_sb = sb_alloc_unicode();
+    sv_to_unicode_sb(&enum_node->name, name_sb);
     
     Type *type = alloc_enum_type(name_sb, NULL, false);
-    assert(hm_put_sb(ctx->scope.types, type->name, type) == 0 && "Failed to register type.");
+    assert(hm_put_hashed(ctx->scope.types, hash_ascii((void*)enum_node->name.items, enum_node->name.count), type) == 0 && "Failed to register type.");
 }
 
 void register_struct(Context *ctx, AST_Node *node) {
@@ -634,12 +638,12 @@ void register_var(Context *ctx, AST_Node *node) {
         alloc_type_value(&result.val, provided_type);
     }
     
-    String_Builder *name_sb = NULL;
+    UnicodeStringBuilder *name_sb = NULL;
     if (symb == NULL) {
-        name_sb = sb_alloc();
-        sv_to_sb(&let_node->name, name_sb);
+        name_sb = sb_alloc_unicode();
+        sv_to_unicode_sb(&let_node->name, name_sb);
         Var *new_var = alloc_var(name_sb, alloc_value(copy_value(&result.val)), let_node->constant);
-        hm_nput(ctx->scope.names, let_node->name.items, let_node->name.count, new_var);
+        hm_put_hashed(ctx->scope.names, hash_ascii(let_node->name.items, let_node->name.count), new_var);
     }
     else {
         Var *var = (void*)symb;
@@ -755,7 +759,7 @@ void unwrap_index_expr(Context *ctx, AST_Node *node, Value *arr, Value* index) {
 }
 
 void assign_var(Context *ctx, AST_NodeName *name_node, Value val) {
-    String_View name_sv = name_node->name;
+    StringView name_sv = name_node->name;
 
     Symbol *symb = NULL;
     if (resolve_name(ctx, name_sv, &symb)) {
@@ -793,7 +797,7 @@ void assign_arr_el(Context *ctx, AST_NodeIndex *index_node, Value val) {
                     return;
                 }
             
-                String_Builder *str = arr_val.as_ptr;
+                UnicodeStringBuilder *str = arr_val.as_ptr;
 
                 if (index.as_int < 0 || index.as_int >= str->count) {
                     append_error(ctx, ERROR_OUT_OF_BOUNDS);
@@ -1184,7 +1188,7 @@ Value execute_index_expr(Context *ctx, AST_Node *node) {
     switch (arr.type->kind) {
         case TYPE_PRIMITIVE: {
             if (arr.type == STR_TYPE) {
-                String_Builder *str = arr.as_ptr;
+                UnicodeStringBuilder *str = arr.as_ptr;
                 value = create_value(CHAR_TYPE);
 
                 if (index.as_int < 0 || index.as_int >= str->count) {
@@ -1192,7 +1196,7 @@ Value execute_index_expr(Context *ctx, AST_Node *node) {
                     return value;
                 }
             
-                value.as_int = str->items[index.as_int];
+                str->items[index.as_int] = value.as_int;
                 return value;
             }
             
@@ -1380,7 +1384,7 @@ EvalResult execute_struct_expr(Context *ctx, AST_Node *node) {
                 continue;
             }
             
-            if (sv_cmp_sb(&ast_initializer.name, member->name)) {
+            if (sv_cmp_unicode_sb(&ast_initializer.name, member->name)) {
                 if (initializer != NULL) {
                     append_error(ctx, ERROR_MULTIPLE_INITIALIZERS);
                     return result;
@@ -1589,8 +1593,8 @@ EvalResult execute_lit_expr(Context *ctx, AST_Node *expr) {
 
         case AST_TYPE_STR: {
             result.val.type = STR_TYPE;
-            String_Builder *sb = sb_alloc();
-            sv_to_escaped_sb(sb, &lit_node->val.view);
+            UnicodeStringBuilder *sb = sb_alloc_unicode();
+            sv_to_escaped_unicode_sb(sb, &lit_node->val.view);
             result.val.as_ptr = sb;
         } break;
     }

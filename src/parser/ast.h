@@ -2,6 +2,7 @@
 #define AST_H
 
 #include "nothing/nothing.h"
+#include "lexer/lexer.h"
 
 typedef enum {
     AST_BINOP,
@@ -58,7 +59,9 @@ typedef enum {
     UNOP_MINUS,
 } UnaryOp;
 
-#define AST_FIELDS AST_Kind kind;
+#define AST_FIELDS \
+    AST_Kind kind; \
+    Span span;
 
 typedef struct AST_Node AST_Node;
 typedef struct AST_NodeName AST_NodeName;
@@ -67,7 +70,7 @@ typedef struct AST_NodeFnDecl AST_NodeFuncDecl;
 typedef struct {
     AST_Node *node;
     bool has_name;
-    String_View name;
+    StringView name;
 } AST_Arg;
 
 typedef struct {
@@ -84,7 +87,7 @@ typedef struct AST_Nodes {
 
 typedef struct AST_Type AST_Type;
 typedef struct AST_Pattern {
-    String_View name;
+    StringView name;
     AST_Type *type;
     AST_Node *initializer;
     bool is_const;
@@ -95,10 +98,11 @@ typedef struct AST_Patterns {
     AST_Pattern *items;
     size_t count;
     size_t capacity;
+    Span span;
 } AST_Patterns;
 
 typedef struct AST_EnumMember {
-    String_View name;
+    StringView name;
     AST_Node *initializer;
 } AST_EnumMember;
 
@@ -109,7 +113,7 @@ typedef struct AST_EnumMembers {
 } AST_EnumMembers;
 
 typedef struct AST_Initializer {
-    String_View name;
+    StringView name;
     bool has_name;
     AST_Node *initializer;
 } AST_Initializer;
@@ -147,7 +151,7 @@ typedef enum AST_LitType {
 
 typedef struct AST_Value {
     AST_LitType type;
-    String_View view;
+    StringView view;
     union {
         int as_char;
         bool as_bool;
@@ -161,12 +165,12 @@ typedef struct {
 
 typedef struct AST_NodeName {
     AST_FIELDS
-    String_View name;
+    StringView name;
 } AST_NodeName;
 
 typedef struct AST_Type {
     AST_FIELDS
-    String_View name;
+    StringView name;
     AST_Type *el_type;
     bool provided_name;
     bool is_array;
@@ -204,7 +208,7 @@ typedef struct {
 
 typedef struct AST_NodeFnDecl {
     AST_FIELDS
-    String_View name;
+    StringView name;
     AST_Patterns args;
     AST_Node *body;
     AST_Type *ret_type;
@@ -213,20 +217,20 @@ typedef struct AST_NodeFnDecl {
 
 typedef struct {
     AST_FIELDS
-    String_View name;
+    StringView name;
     AST_Patterns fields;
     AST_Nodes methods;
 } AST_NodeStructDecl;
 
 typedef struct {
     AST_FIELDS
-    String_View name;
+    StringView name;
     AST_EnumMembers members;
 } AST_NodeEnumDecl;
 
 typedef struct {
     AST_FIELDS
-    String_View name;
+    StringView name;
     AST_Type *type;
     AST_Node *initializer;
     bool constant;

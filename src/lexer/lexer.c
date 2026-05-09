@@ -1,13 +1,35 @@
-#include "ctype.h"
 #include "lexer.h"
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
+#include <ctype.h>
 
 #define CURRENT(l) (l)->source.items[(l)->pos]
 #define INBOUNDS(l) ((l)->pos < (l)->source.count)
+
+Span span_combine(Span span_1, Span span_2) {
+    size_t start_line = span_1.start_line;
+    size_t start_col = span_1.start_col; 
+    if (span_2.start_line < span_1.start_line) {
+        start_line = span_2.start_line;
+        start_col = span_2.start_col;
+    }
+
+    size_t end_line = span_1.end_line;
+    size_t end_col = span_1.end_col; 
+    if (span_2.end_line > span_1.end_line) {
+        end_line = span_2.end_line;
+        end_col = span_2.end_col;
+    }
+    
+    return (Span){
+        .start_line = start_line,
+        .start_col = start_col,
+        .end_line = end_line,
+        .end_col = end_col,
+    };
+}
 
 bool is_binop(Token tok) {
     switch (tok.kind) {
@@ -174,7 +196,7 @@ void skip_whitespaces(Lexer *l) {
 Token lexer_get_number(Lexer *l) {
     Token tok = {
         .kind = TOKEN_INT,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 0,
         },
@@ -209,7 +231,7 @@ Token lexer_get_str(Lexer *l) {
     
     Token tok = {
         .kind = TOKEN_STR,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 0,
         },
@@ -247,7 +269,7 @@ Token lexer_get_char(Lexer *l) {
     
     Token tok = {
         .kind = TOKEN_CHAR,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 0,
         },
@@ -271,7 +293,7 @@ Token lexer_get_char(Lexer *l) {
 Token lexer_get_name(Lexer *l) {
     Token tok = {
         .kind = TOKEN_NAME,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 0,
         },
@@ -374,7 +396,7 @@ Token get_lit_token(Lexer *l) {
 Token get_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_NONE,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -452,7 +474,7 @@ switch (CURRENT(l)) {
 Token get_eq_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_ASSIGN,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -464,7 +486,7 @@ Token get_eq_token(Lexer *l) {
         ++tok.val.count;
         ++l->pos;
     } else if (INBOUNDS(l) && CURRENT(l) == '>') {
-        tok.kind = TOKEN_ARROW;
+        tok.kind = TOKEN_FAT_ARROW;
         ++tok.val.count;
         ++l->pos;
     }
@@ -475,7 +497,7 @@ Token get_eq_token(Lexer *l) {
 Token get_not_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_NOT,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -494,7 +516,7 @@ Token get_not_token(Lexer *l) {
 Token get_gt_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_GT,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -512,7 +534,7 @@ Token get_gt_token(Lexer *l) {
 Token get_lt_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_LT,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -531,7 +553,7 @@ Token get_lt_token(Lexer *l) {
 Token get_dot_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_DOT,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -556,7 +578,7 @@ Token get_dot_token(Lexer *l) {
 Token get_plus_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_PLUS,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -575,7 +597,7 @@ Token get_plus_token(Lexer *l) {
 Token get_minus_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_MINUS,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -594,7 +616,7 @@ Token get_minus_token(Lexer *l) {
 Token get_and_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_AND,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },
@@ -613,7 +635,7 @@ Token get_and_token(Lexer *l) {
 Token get_or_token(Lexer *l) {
     Token tok = {
         .kind = TOKEN_OR,
-        .val = (String_View){
+        .val = (StringView){
             .items = l->source.items + l->pos,
             .count = 1,
         },

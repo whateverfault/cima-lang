@@ -13,7 +13,7 @@ typedef enum SymbolKind {
 } SymbolKind;
 
 #define SYMBOL_FIELDS       \
-    String_Builder *name;   \
+    UnicodeStringBuilder *name;   \
     SymbolKind symb_kind;   \
     bool constant;          \
     bool is_static;

@@ -1,10 +1,10 @@
 let msg = "Hello" + ',' + " World!";
 my_print(msg);
 
-func my_print(msg: str, args: ...) : void {
-    my_print_inside_my_print(msg, args)
+func my_print(fmt: str, args: ...) : void {
+    my_print_inside_my_print(fmt, args)
     
-    func my_print_inside_my_print(msg: str, args: ...) : void {
-        println(msg: msg, args: args)
+    func my_print_inside_my_print(fmt: str, args: ...) : void {
+        println(fmt: fmt, args: args)
     }
 }

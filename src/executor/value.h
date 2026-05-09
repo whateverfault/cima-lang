@@ -7,7 +7,7 @@
 #define FLOAT_CTYPE double
 #define BOOL_CTYPE bool
 #define CHAR_CTYPE char
-#define STR_CTYPE String_Builder
+#define STR_CTYPE UnicodeStringBuilder
 #define PTR_CTYPE void*
 
 #define INT_CTYPE_MIN INT_MIN
@@ -40,7 +40,7 @@ typedef struct Array {
 
 typedef struct AST_Node AST_Node;
 typedef struct Pattern {
-    String_Builder *name;
+    UnicodeStringBuilder *name;
     Type *type;
     AST_Node *initializer;
     bool constant;
@@ -57,7 +57,7 @@ typedef struct Member {
     Type *type;
     bool is_const;
     bool is_static;
-    String_Builder *name;
+    UnicodeStringBuilder *name;
 
     enum {
         MEMBER_FIELD,

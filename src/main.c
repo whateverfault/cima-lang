@@ -186,7 +186,7 @@ void usage(char **argv) {
 // TODO: Implement UTF-8 chars
 
 int main(int argc, char **argv) {
-    String_Builder source_sb = {0};
+    StringBuilder source_sb = {0};
 
     if (argc != 2) {
         usage(argv);
@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
     Context ctx = {0};
     global_ctx_init(&ctx);
 
-    String_View source_sv = {0};
+    StringView source_sv = {0};
     sv_from_sb(&source_sv, &source_sb);
     
     Lexer l = {

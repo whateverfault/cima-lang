@@ -35,11 +35,16 @@ extern const Type array_any_symb;
 #define ARRAY_ANY_TYPE (void*)&array_any_symb
 #define VARIADIC_TYPE (void*)&variadic_symb
 
+size_t hash_func(Func *f);
+size_t hash_type(Type *t);
+
+bool compare_funcs(Func *f_1, Func *f_2);
+
 Value get_static_member_val(Member *member);
 Value get_static_member_ref(Context *ctx, Member *member);
 Value get_member_val(Struct strct, Member *member);
 Value get_member_ref(Context *ctx, Struct strct, Member *member);
-bool get_member(Type *type, String_View *name_sv, Member **member);
+bool get_member(Type *type, StringView *name_sv, Member **member);
 void assign_field(Context *ctx, Struct strct, Member *member, Value val);
 Value copy_value(Value *value);
 
@@ -48,9 +53,9 @@ void alloc_type_value(Value *val, Type *type);
 Array *alloc_array_value(Type *el_type);
 Struct alloc_struct_value(Type *type);
 
-Type *alloc_struct_type(String_Builder *name_sb, Members *members, bool initialized);
+Type *alloc_struct_type(UnicodeStringBuilder *name_sb, Members *members, bool initialized);
 Type *alloc_enum_el_type(Context *ctx, Type *t, Type *enum_type);
-Type *alloc_enum_type(String_Builder *name_sb, Members *members, bool initialized);
+Type *alloc_enum_type(UnicodeStringBuilder *name_sb, Members *members, bool initialized);
 Type *alloc_type_type(Context *ctx, Type *t);
 Type *alloc_ref_type(Context *ctx, Type *t);
 Type *alloc_func_type(Context *ctx, Func *func);
@@ -59,8 +64,8 @@ Type *alloc_array_type(Context *ctx, Type *el_type);
 bool compatible_types(Type *type_1, Type *type_2);
 Value cast_value(Context *ctx, Value val, Type *type);
 
-void format_str(String_Builder *sb, Context *ctx, String_View fmt_sv, Array *va_args);
-void to_str(String_Builder *sb, Context *ctx, Value val, size_t depth);
+void format_str(UnicodeStringBuilder *sb, Context *ctx, StringView fmt_sv, Array *va_args);
+void to_str(UnicodeStringBuilder *sb, Context *ctx, Value val, size_t depth);
 bool to_bool(Context *ctx, Value val);
 
 Value binary_plus(Context *ctx, Value lhs, Value rhs);

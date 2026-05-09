@@ -109,19 +109,20 @@ void ast_free(AST_Node *node) {
     free(node);
 }
 
-AST_Value create_ast_value(AST_LitType type, String_View view) {
+AST_Value create_ast_value(AST_LitType type, StringView view) {
     return (AST_Value){
         .type = type,
         .view = view,
     };
 }
 
-AST_NodeLit *alloc_lit_node(AST_Value val) {
+AST_NodeLit *alloc_lit_node(AST_Value val, Span span) {
     AST_NodeLit *lit_node = malloc(sizeof(AST_NodeLit));
     assert(lit_node != NULL && "Memory allocation failed");
     
     lit_node->kind = AST_LIT;
     lit_node->val = val;
+    lit_node->span = span;
     
     return lit_node;
 }
@@ -149,7 +150,7 @@ AST_NodeUnOp *alloc_unop_node(AST_Node *expr, UnaryOp op) {
     return unop_node;
 }
 
-AST_NodeName *alloc_name_node(String_View sv) {
+AST_NodeName *alloc_name_node(StringView sv) {
     AST_NodeName *name_node = malloc(sizeof(AST_NodeName));
     assert(name_node != NULL && "Memory allocation failed");
 
@@ -159,7 +160,7 @@ AST_NodeName *alloc_name_node(String_View sv) {
     return name_node;
 }
 
-AST_Type *alloc_basic_type_node(String_View sv) {
+AST_Type *alloc_basic_type_node(StringView sv) {
     AST_Type *type = malloc(sizeof(AST_Type));
     assert(type != NULL && "Memory allocation failed");
 
@@ -227,7 +228,7 @@ AST_NodeCast *alloc_cast_node(AST_Node *node, AST_Type *type) {
     return cast_node;
 }
 
-AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node *body, AST_Type *ret_type, bool is_static) {
+AST_NodeFuncDecl *alloc_func_node(StringView name, AST_Patterns args, AST_Node *body, AST_Type *ret_type, bool is_static) {
     AST_NodeFuncDecl *func_node = malloc(sizeof(AST_NodeFuncDecl));
     assert(func_node != NULL && "Memory allocation failed");
 
@@ -241,7 +242,7 @@ AST_NodeFuncDecl *alloc_func_node(String_View name, AST_Patterns args, AST_Node 
     return func_node;
 }
 
-AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST_Nodes funcs) {
+AST_NodeStructDecl *alloc_struct_node(StringView name, AST_Patterns fields, AST_Nodes funcs) {
     AST_NodeStructDecl *struct_node = malloc(sizeof(AST_NodeStructDecl));
     assert(struct_node != NULL && "Memory allocation failed");
 
@@ -253,7 +254,7 @@ AST_NodeStructDecl *alloc_struct_node(String_View name, AST_Patterns fields, AST
     return struct_node;
 }
 
-AST_NodeEnumDecl *alloc_enum_node(String_View name, AST_EnumMembers members) {
+AST_NodeEnumDecl *alloc_enum_node(StringView name, AST_EnumMembers members) {
     AST_NodeEnumDecl *enum_node = malloc(sizeof(AST_NodeEnumDecl));
     assert(enum_node != NULL && "Memory allocation failed");
 
@@ -264,7 +265,7 @@ AST_NodeEnumDecl *alloc_enum_node(String_View name, AST_EnumMembers members) {
     return enum_node;
 }
 
-AST_NodeLetStmt *alloc_let_node(String_View name, AST_Type *type, AST_Node *initializer, bool constant) {
+AST_NodeLetStmt *alloc_let_node(StringView name, AST_Type *type, AST_Node *initializer, bool constant) {
     AST_NodeLetStmt *let_node = malloc(sizeof(AST_NodeLetStmt));
     assert(let_node != NULL && "Memory allocation failed");
 
@@ -367,7 +368,7 @@ AST_Type *alloc_arr_type_node(AST_Type *el_type) {
     assert(type != NULL && "Memory allocation failed");
 
     type->kind = AST_TYPE;
-    type->name = (String_View){0};
+    type->name = (StringView){0};
     type->el_type = el_type;
     type->provided_name = false;
     type->is_array = true;
@@ -566,7 +567,7 @@ ParserError parse_num(Lexer *l, AST_Node **ret) {
     if (l->cur.kind != TOKEN_INT && l->cur.kind != TOKEN_FLOAT) {
         return PERROR_UNEXPECTED_TOKEN;
     }
-
+    
     AST_Value val = {
         .view = l->cur.val,
     };
@@ -589,8 +590,8 @@ ParserError parse_num(Lexer *l, AST_Node **ret) {
         val.type = AST_TYPE_INT;
     }
     
+    *ret = (void*)alloc_lit_node(val, l->cur.span);
     lexer_next(l);
-    *ret = (void*)alloc_lit_node(val);
     return PERROR_NONE;
 }
 
@@ -601,10 +602,9 @@ ParserError parse_bool(Lexer *l, AST_Node **ret) {
 
     AST_Value val = create_ast_value(AST_TYPE_BOOL, l->cur.val);
     val.as_bool = l->cur.kind == TOKEN_KW_TRUE;
-    
-    lexer_next(l);
 
-    *ret = (void*)alloc_lit_node(val);
+    *ret = (void*)alloc_lit_node(val, l->cur.span);
+    lexer_next(l);
     return PERROR_NONE;
 }
 
@@ -615,9 +615,8 @@ ParserError parse_str(Lexer *l, AST_Node **ret) {
 
     AST_Value val = create_ast_value(AST_TYPE_STR, l->cur.val);
     
+    *ret = (void*)alloc_lit_node(val, l->cur.span);
     lexer_next(l);
-
-    *ret = (void*)alloc_lit_node(val);
     return PERROR_NONE;
 }
 
@@ -643,9 +642,9 @@ ParserError parse_char(Lexer *l, AST_Node **ret) {
     
     AST_Value val = create_ast_value(AST_TYPE_CHAR, l->cur.val);
     val.as_char = c;
-    lexer_next(l);
 
-    *ret = (void*)alloc_lit_node(val);
+    *ret = (void*)alloc_lit_node(val, l->cur.span);
+    lexer_next(l);
     return PERROR_NONE;
 }
 
@@ -1179,7 +1178,7 @@ ParserError parse_initializers(Lexer *l, AST_InitializerList *initializers) {
         }
         
         bool has_name = false;
-        String_View name = {0};
+        StringView name = {0};
         AST_Node *expr;
         ParserError err = parse_expr(l, 0, &expr);
         if (err != PERROR_NONE) {
@@ -1385,7 +1384,7 @@ ParserError parse_expr(Lexer *l, size_t min_prec, AST_Node **ret) {
 }
 
 ParserError parse_primitive_type(Lexer *l, AST_Node **ret) {
-    String_View name_sv = l->cur.val;
+    StringView name_sv = l->cur.val;
     lexer_next(l);
     *ret = (void*)alloc_basic_type_node(name_sv);
     return PERROR_NONE;
@@ -1453,7 +1452,7 @@ ParserError parse_pattern(Lexer *l, AST_Pattern *pattern, bool is_const, bool is
         return PERROR_UNEXPECTED_TOKEN;
     }
 
-    String_View name_sv = l->cur.val;
+    StringView name_sv = l->cur.val;
 
     lexer_next(l);
 
@@ -1550,14 +1549,16 @@ ParserError parse_patterns(Lexer *l, AST_Patterns *patterns) {
 ParserError parse_func_item(Lexer *l, bool is_static, AST_Node **ret) {
     assert(l->cur.kind == TOKEN_KW_FUNC);
 
+    Span span = l->cur.span;
     lexer_next(l);
 
     if (l->cur.kind != TOKEN_NAME) {
         return PERROR_UNEXPECTED_TOKEN;
     }
     
-    String_View name = l->cur.val;
+    StringView name = l->cur.val;
 
+    span = span_combine(l->cur.span, span);
     lexer_next(l);
 
     if (l->cur.kind != TOKEN_LPAREN) {
@@ -1566,16 +1567,19 @@ ParserError parse_func_item(Lexer *l, bool is_static, AST_Node **ret) {
     
     AST_Patterns args;
     ParserError err = parse_patterns(l, &args);
+    span = span_combine(args.span, span);
     if (err != PERROR_NONE) {
         return err;
     }
-
+    
     AST_Type *ret_type = NULL;
     if (l->cur.kind == TOKEN_COLON) {
+        span = span_combine(l->cur.span, span);
         lexer_next(l);
         
         AST_Node *type_node;
         err = parse_type(l, &type_node);
+        span = span_combine(type_node->span, span);
         if (err != PERROR_NONE) {
             ast_patterns_free(args);
             return err;
@@ -1585,7 +1589,8 @@ ParserError parse_func_item(Lexer *l, bool is_static, AST_Node **ret) {
     }
 
     AST_Node *body = NULL;
-    if (l->cur.kind == TOKEN_ARROW) {
+    if (l->cur.kind == TOKEN_FAT_ARROW) {
+        span = span_combine(l->cur.span, span);
         lexer_next(l);
         err = parse(l, &body);
     }
@@ -1596,6 +1601,7 @@ ParserError parse_func_item(Lexer *l, bool is_static, AST_Node **ret) {
         err = PERROR_UNEXPECTED_TOKEN;
     }
 
+    span = span_combine(l->cur.span, body->span);
     if (err != PERROR_NONE) {
         ast_patterns_free(args);
         ast_free((void*)ret_type);
@@ -1616,7 +1622,7 @@ ParserError parse_struct_item(Lexer *l, AST_Node **ret) {
         return PERROR_UNEXPECTED_TOKEN;
     }
 
-    String_View name_sv = l->cur.val;
+    StringView name_sv = l->cur.val;
 
     lexer_next(l);
     
@@ -1705,7 +1711,7 @@ ParserError parse_enum_item(Lexer *l, AST_Node **ret) {
         return PERROR_UNEXPECTED_TOKEN;
     }
 
-    String_View name_sv = l->cur.val;
+    StringView name_sv = l->cur.val;
 
     lexer_next(l);
     
@@ -1728,7 +1734,7 @@ ParserError parse_enum_item(Lexer *l, AST_Node **ret) {
             return PERROR_UNEXPECTED_TOKEN;
         }
 
-        String_View member_name_sv = l->cur.val;
+        StringView member_name_sv = l->cur.val;
 
         lexer_next(l);
         
@@ -1789,7 +1795,7 @@ ParserError parse_let_stmt(Lexer *l, bool constant, AST_Node **ret) {
         return PERROR_UNEXPECTED_TOKEN;
     }
 
-    String_View name = l->cur.val;
+    StringView name = l->cur.val;
 
     lexer_next(l);
 

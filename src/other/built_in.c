@@ -3,22 +3,48 @@
 #include "executor/funcs/funcs.h"
 #include "executor/types/type.h"
 
-static String_Builder msg_sb = CSTR_TO_SB("msg");
-static String_Builder args_sb = CSTR_TO_SB("args");
-static String_Builder string_sb = CSTR_TO_SB("string");
-static String_Builder intercept_sb = CSTR_TO_SB("intercept");
-static String_Builder column_sb = CSTR_TO_SB("column");
-static String_Builder row_sb = CSTR_TO_SB("row");
-static String_Builder arr_sb = CSTR_TO_SB("arr");
-static String_Builder min_sb = CSTR_TO_SB("min");
-static String_Builder max_sb = CSTR_TO_SB("max");
-static String_Builder els_sb = CSTR_TO_SB("elements");
-static String_Builder index_sb = CSTR_TO_SB("index");
-static String_Builder ms_sb = CSTR_TO_SB("ms");
+static int32_t fmt_utf32[] = {'f', 'm', 't'};
+static UnicodeStringBuilder fmt_sb = CSTR_TO_SB_UNICODE(fmt_utf32);
+
+static int32_t args_utf32[] = { 'a','r','g','s' };
+static UnicodeStringBuilder args_sb = CSTR_TO_SB_UNICODE(args_utf32);
+
+static int32_t string_utf32[] = { 's','t','r','i','n','g' };
+static UnicodeStringBuilder string_sb = CSTR_TO_SB_UNICODE(string_utf32);
+
+static int32_t intercept_utf32[] = { 'i','n','t','e','r','c','e','p','t' };
+static UnicodeStringBuilder intercept_sb = CSTR_TO_SB_UNICODE(intercept_utf32);
+
+static int32_t column_utf32[] = { 'c','o','l','u','m','n' };
+static UnicodeStringBuilder column_sb = CSTR_TO_SB_UNICODE(column_utf32);
+
+static int32_t row_utf32[] = { 'r','o','w' };
+static UnicodeStringBuilder row_sb = CSTR_TO_SB_UNICODE(row_utf32);
+
+static int32_t arr_utf32[] = { 'a','r','r' };
+static UnicodeStringBuilder arr_sb = CSTR_TO_SB_UNICODE(arr_utf32);
+
+static int32_t str_utf32[] = { 's','t','r' };
+static UnicodeStringBuilder str_sb = CSTR_TO_SB_UNICODE(str_utf32);
+
+static int32_t min_utf32[] = { 'm','i','n' };
+static UnicodeStringBuilder min_sb = CSTR_TO_SB_UNICODE(min_utf32);
+
+static int32_t max_utf32[] = { 'm','a','x' };
+static UnicodeStringBuilder max_sb = CSTR_TO_SB_UNICODE(max_utf32);
+
+static int32_t elements_utf32[] = { 'e','l','e','m','e','n','t','s' };
+static UnicodeStringBuilder els_sb = CSTR_TO_SB_UNICODE(elements_utf32);
+
+static int32_t index_utf32[] = { 'i','n','d','e','x' };
+static UnicodeStringBuilder index_sb = CSTR_TO_SB_UNICODE(index_utf32);
+
+static int32_t ms_utf32[] = { 'm','s' };
+static UnicodeStringBuilder ms_sb = CSTR_TO_SB_UNICODE(ms_utf32);
 
 static Pattern format_pattern[] = {
     (Pattern){
-        .name = &msg_sb,
+        .name = &fmt_sb,
         .type = STR_TYPE,
     },
     (Pattern){
@@ -53,10 +79,17 @@ static Pattern str_pattern[] = {
     },
 };
 
-static Pattern len_pattern[] = {
+static Pattern arr_len_pattern[] = {
     (Pattern){
         .name = &arr_sb,
         .type = ARRAY_ANY_TYPE,
+    },
+};
+
+static Pattern str_len_pattern[] = {
+    (Pattern){
+        .name = &str_sb,
+        .type = STR_TYPE,
     },
 };
 
@@ -126,8 +159,14 @@ static const Patterns str_patterns = (Patterns){
     .capacity = 1,
 };
 
-static const Patterns len_patterns = (Patterns){
-    .items = len_pattern,
+static const Patterns arr_len_patterns = (Patterns){
+    .items = arr_len_pattern,
+    .count = 1,
+    .capacity = 1,
+};
+
+static const Patterns str_len_patterns = (Patterns){
+    .items = str_len_pattern,
     .count = 1,
     .capacity = 1,
 };
@@ -162,23 +201,56 @@ static const Patterns empty_patterns = (Patterns){
     .capacity = 0,
 };
 
-static String_Builder format_sb = CSTR_TO_SB("format");
-static String_Builder print_sb = CSTR_TO_SB("print");
-static String_Builder println_sb = CSTR_TO_SB("println");
-static String_Builder read_sb = CSTR_TO_SB("read");
-static String_Builder readln_sb = CSTR_TO_SB("readln");
-static String_Builder readkey_sb = CSTR_TO_SB("readkey");
-static String_Builder key_pressed_sb = CSTR_TO_SB("key_pressed");
-static String_Builder clear_sb = CSTR_TO_SB("clear");
-static String_Builder sleep_sb = CSTR_TO_SB("sleep");
-static String_Builder move_cursor_sb = CSTR_TO_SB("move_cursor");
-static String_Builder trim_sb = CSTR_TO_SB("trim");
-static String_Builder trim_left_sb = CSTR_TO_SB("trim_left");
-static String_Builder trim_right_sb = CSTR_TO_SB("trim_right");
-static String_Builder len_sb = CSTR_TO_SB("len");
-static String_Builder randint_sb = CSTR_TO_SB("randint");
-static String_Builder append_sb = CSTR_TO_SB("append");
-static String_Builder remove_at_sb = CSTR_TO_SB("remove_at");
+static int32_t format_utf32[] = {'f','o','r','m','a','t'};
+static UnicodeStringBuilder format_sb = CSTR_TO_SB_UNICODE(format_utf32);
+
+static int32_t print_utf32[] = {'p','r','i','n','t'};
+static UnicodeStringBuilder print_sb = CSTR_TO_SB_UNICODE(print_utf32);
+
+static int32_t println_utf32[] = {'p','r','i','n','t','l','n'};
+static UnicodeStringBuilder println_sb = CSTR_TO_SB_UNICODE(println_utf32);
+
+static int32_t read_utf32[] = {'r','e','a','d'};
+static UnicodeStringBuilder read_sb = CSTR_TO_SB_UNICODE(read_utf32);
+
+static int32_t readln_utf32[] = {'r','e','a','d','l','n'};
+static UnicodeStringBuilder readln_sb = CSTR_TO_SB_UNICODE(readln_utf32);
+
+static int32_t readkey_utf32[] = {'r','e','a','d','k','e','y'};
+static UnicodeStringBuilder readkey_sb = CSTR_TO_SB_UNICODE(readkey_utf32);
+
+static int32_t key_pressed_utf32[] = {'k','e','y','_','p','r','e','s','s','e','d'};
+static UnicodeStringBuilder key_pressed_sb = CSTR_TO_SB_UNICODE(key_pressed_utf32);
+
+static int32_t clear_utf32[] = {'c','l','e','a','r'};
+static UnicodeStringBuilder clear_sb = CSTR_TO_SB_UNICODE(clear_utf32);
+
+static int32_t sleep_utf32[] = {'s','l','e','e','p'};
+static UnicodeStringBuilder sleep_sb = CSTR_TO_SB_UNICODE(sleep_utf32);
+
+static int32_t move_cursor_utf32[] = {'m','o','v','e','_','c','u','r','s','o','r'};
+static UnicodeStringBuilder move_cursor_sb = CSTR_TO_SB_UNICODE(move_cursor_utf32);
+
+static int32_t trim_utf32[] = {'t','r','i','m'};
+static UnicodeStringBuilder trim_sb = CSTR_TO_SB_UNICODE(trim_utf32);
+
+static int32_t trim_left_utf32[] = {'t','r','i','m','_','l','e','f','t'};
+static UnicodeStringBuilder trim_left_sb = CSTR_TO_SB_UNICODE(trim_left_utf32);
+
+static int32_t trim_right_utf32[] = {'t','r','i','m','_','r','i','g','h','t'};
+static UnicodeStringBuilder trim_right_sb = CSTR_TO_SB_UNICODE(trim_right_utf32);
+
+static int32_t len_utf32[] = {'l','e','n'};
+static UnicodeStringBuilder len_sb = CSTR_TO_SB_UNICODE(len_utf32);
+
+static int32_t randint_utf32[] = {'r','a','n','d','i','n','t'};
+static UnicodeStringBuilder randint_sb = CSTR_TO_SB_UNICODE(randint_utf32);
+
+static int32_t append_utf32[] = {'a','p','p','e','n','d'};
+static UnicodeStringBuilder append_sb = CSTR_TO_SB_UNICODE(append_utf32);
+
+static int32_t remove_at_utf32[] = {'r','e','m','o','v','e','_','a','t'};
+static UnicodeStringBuilder remove_at_sb = CSTR_TO_SB_UNICODE(remove_at_utf32);
 
 FuncBuiltIn builtin_funcs[builtin_funcs_count] = {
     (FuncBuiltIn){
@@ -276,9 +348,16 @@ FuncBuiltIn builtin_funcs[builtin_funcs_count] = {
         .symb_kind = SYMB_FUNC,
         .name = &len_sb,
         .func = arr_len_func,
-        .args = len_patterns,
+        .args = arr_len_patterns,
         .constant = true,
     },
+    /*(FuncBuiltIn){
+        .symb_kind = SYMB_FUNC,
+        .name = &len_sb,
+        .func = str_len_func,
+        .args = str_len_patterns,
+        .constant = true,
+    },*/
     (FuncBuiltIn){
         .symb_kind = SYMB_FUNC,
         .name = &append_sb,
