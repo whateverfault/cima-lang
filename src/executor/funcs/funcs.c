@@ -487,6 +487,7 @@ Value append_func(Context *ctx, Context *fn_ctx) {
     Array *va_args = va_args_arg_var->val->as_ptr;
 
     da_append_many(arr, va_args);
+    arr_arg_var->val->as_ptr = arr;
     return ret;
 }
 

@@ -583,22 +583,7 @@ void format_str(UnicodeStringBuilder *sb, Context *ctx, StringView fmt_sv, Array
         sb_unicode_append_sv(sb, &l.skipped);
         
         if (l.cur.kind != TOKEN_LBRACE) {
-            if (l.cur.kind == TOKEN_CHAR) {
-                sb_unicode_appendc(sb, '\'');
-            }
-            else if (l.cur.kind == TOKEN_STR) {
-                sb_unicode_appendc(sb, '\"');
-            }
-            
             sb_unicode_append_sv(sb, &l.cur.val);
-
-            if (l.cur.kind == TOKEN_CHAR) {
-                sb_unicode_appendc(sb, '\'');
-            }
-            else if (l.cur.kind == TOKEN_STR) {
-                sb_unicode_appendc(sb, '\"');
-            }
-            
             lexer_next(&l);
             continue;
         }
